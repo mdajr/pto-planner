@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon PTO Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"/>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 1.25rem;
+            top: 1.25rem;
+            bottom: -1.25rem;
+            width: 2px;
+            background-color: #4a5568;
+            transform: translateX(-50%);
+        }
+        .timeline-item:last-child::before {
+            display: none;
+        }
+        .timeline-dot {
+            position: absolute;
+            left: 1.25rem;
+            top: 1.25rem;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 9999px;
+            transform: translateX(-50%);
+        }
+        /* Style litepicker to match the dark theme */
+        .litepicker {
+            background-color: #1f2937;
+            border-color: #4b5563;
+        }
+        .litepicker, .litepicker .container__months .month-item-header, .litepicker .container__months .month-item {
+             color: #d1d5db;
+        }
+        .litepicker .month-item-day.is-start-date, .litepicker .month-item-day.is-end-date {
+            background-color: #4f46e5 !important;
+            color: white !important;
+        }
+        .litepicker .month-item-day.in-range {
+            background-color: #3730a3 !important;
+            color: white !important;
+        }
+        .litepicker .button-previous-month, .litepicker .button-next-month {
+            color: #9ca3af;
+        }
+        .litepicker .button-previous-month:hover, .litepicker .button-next-month:hover {
+            background-color: #374151;
+        }
+        .litepicker .month-item-day:hover {
+            background-color: #4b5563;
+        }
+        .litepicker .month-item-day.is-today {
+            color: #6366f1;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-white">Amazon PTO Calculator</h1>
+            <div class="flex space-x-2">
+                <button id="importBtn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Import Data</button>
+                <input type="file" id="importFile" class="hidden" accept=".json">
+                <button id="exportBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md">Export Data</button>
+            </div>
+        </div>
+
+
+        <!-- Inputs Section -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-white">Current Balances</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="currentStandardPto" class="block text-sm font-medium text-gray-300">Standard PTO Balance (hours)</label>
+                    <input type="number" id="currentStandardPto" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                </div>
+                <div>
+                    <label for="currentFlexPto" class="block text-sm font-medium text-gray-300">Total Flex PTO Balance (hours)</label>
+                    <input type="number" id="currentFlexPto" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                </div>
+            </div>
+        </div>
+
+        <!-- Add/Edit Vacation Section -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+            <h2 id="vacationFormTitle" class="text-2xl font-semibold mb-4 text-white">Add Future Vacation</h2>
+            <div class="mb-4">
+                 <label for="dateRangePicker" class="block text-sm font-medium text-gray-300">Select Vacation Date Range</label>
+                 <input id="dateRangePicker" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Click to select a date range..."/>
+            </div>
+             <div id="ptoSuggestion" class="text-center text-indigo-300 font-semibold my-4 hidden flex-col justify-center"></div>
+             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                <input type="hidden" id="editingVacationId">
+                <div class="lg:col-span-1">
+                    <label for="standardPtoHours" class="block text-sm font-medium text-gray-300">Standard PTO Hours</label>
+                    <input type="number" id="standardPtoHours" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="8">
+                </div>
+                <div class="lg:col-span-1">
+                    <label for="flexPtoHours" class="block text-sm font-medium text-gray-300">Flex PTO Hours</label>
+                    <input type="number" id="flexPtoHours" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                </div>
+                <div class="lg:col-span-1">
+                    <button id="addVacationBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500">Add Vacation</button>
+                </div>
+                 <div class="lg:col-span-1">
+                    <button id="cancelEditBtn" class="hidden w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Cancel Edit</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vacations List -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-white">Scheduled Vacations</h2>
+            <ul id="vacationsList" class="space-y-3"></ul>
+        </div>
+
+        <!-- Global Warning Block -->
+        <div id="globalWarningBlock" class="hidden bg-red-900 border-l-4 border-red-500 text-red-100 p-4 rounded-lg shadow-lg mb-8" role="alert">
+            <p class="font-bold">Future Balance Warning</p>
+            <p>One or more of your scheduled vacations will result in a negative PTO balance. Check the timeline for details.</p>
+        </div>
+
+        <!-- Timeline Section -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+            <h2 class="text-2xl font-semibold mb-6 text-white">Projected PTO Timeline</h2>
+            <div id="timeline" class="relative"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM Elements
+            const currentStandardPtoInput = document.getElementById('currentStandardPto');
+            const currentFlexPtoInput = document.getElementById('currentFlexPto');
+            const standardPtoHoursInput = document.getElementById('standardPtoHours');
+            const flexPtoHoursInput = document.getElementById('flexPtoHours');
+            const addVacationBtn = document.getElementById('addVacationBtn');
+            const vacationsList = document.getElementById('vacationsList');
+            const timeline = document.getElementById('timeline');
+            const editingVacationIdInput = document.getElementById('editingVacationId');
+            const vacationFormTitle = document.getElementById('vacationFormTitle');
+            const cancelEditBtn = document.getElementById('cancelEditBtn');
+            const globalWarningBlock = document.getElementById('globalWarningBlock');
+            const ptoSuggestion = document.getElementById('ptoSuggestion');
+            const exportBtn = document.getElementById('exportBtn');
+            const importBtn = document.getElementById('importBtn');
+            const importFile = document.getElementById('importFile');
+
+            let vacations = [];
+            const holidayCache = {};
+
+            // --- Date Formatting Helper ---
+            function formatDate(date) {
+                if (!(date instanceof Date) || isNaN(date)) return '';
+                const month = date.getMonth() + 1;
+                const day = date.getDate();
+                const year = date.getFullYear();
+                return `${month}/${day}/${year}`;
+            }
+
+            // --- Holiday Calculation Logic ---
+            function getHolidaysForYear(year) {
+                if (holidayCache[year]) return holidayCache[year];
+
+                const holidays = new Map();
+
+                const adjustForWeekend = (date, name) => {
+                    const day = date.getDay();
+                    if (day === 6) { date.setDate(date.getDate() + 2); }
+                    else if (day === 0) { date.setDate(date.getDate() + 1); }
+                    holidays.set(date.toDateString(), name);
+                };
+
+                const findNthDayOfWeek = (year, month, dayOfWeek, n, name) => {
+                    let count = 0;
+                    const date = new Date(year, month, 1);
+                    while (count < n) {
+                        if (date.getDay() === dayOfWeek) { count++; }
+                        if (count < n) { date.setDate(date.getDate() + 1); }
+                    }
+                    holidays.set(date.toDateString(), name);
+                };
+
+                const findLastDayOfWeek = (year, month, dayOfWeek, name) => {
+                    const date = new Date(year, month + 1, 0);
+                    while(date.getDay() !== dayOfWeek) { date.setDate(date.getDate() - 1); }
+                    holidays.set(date.toDateString(), name);
+                };
+
+                adjustForWeekend(new Date(year, 0, 1), "New Year's Day");
+                findNthDayOfWeek(year, 0, 1, 3, "MLK Day");
+                findLastDayOfWeek(year, 4, 1, "Memorial Day");
+                adjustForWeekend(new Date(year, 6, 4), "Independence Day");
+                findNthDayOfWeek(year, 8, 1, 1, "Labor Day");
+                findNthDayOfWeek(year, 10, 4, 4, "Thanksgiving");
+                adjustForWeekend(new Date(year, 11, 25), "Christmas Day");
+
+                holidayCache[year] = holidays;
+                return holidays;
+            }
+
+            // --- PTO Hour Calculation ---
+            function calculatePtoHours(startDate, endDate) {
+                ptoSuggestion.innerHTML = '';
+                if (!startDate || !endDate) {
+                    ptoSuggestion.classList.add('hidden');
+                    return;
+                }
+
+                let workdays = 0;
+                let weekendDays = 0;
+                let holidaysFound = [];
+
+                const holidaysForYears = new Map([
+                    ...getHolidaysForYear(startDate.getFullYear()),
+                    ...(startDate.getFullYear() !== endDate.getFullYear() ? [...getHolidaysForYear(endDate.getFullYear())] : [])
+                ]);
+
+                let currentDate = new Date(startDate);
+                while (currentDate <= endDate) {
+                    const day = currentDate.getDay();
+                    const dateStr = currentDate.toDateString();
+
+                    if (day === 0 || day === 6) { weekendDays++; }
+                    else if (holidaysForYears.has(dateStr)) { holidaysFound.push(holidaysForYears.get(dateStr)); }
+                    else { workdays++; }
+                    currentDate.setDate(currentDate.getDate() + 1);
+                }
+
+                const suggestedHours = workdays * 8;
+                standardPtoHoursInput.value = suggestedHours;
+                flexPtoHoursInput.value = 0;
+
+                let suggestionHtml = `<span>Suggested: <strong>${suggestedHours} hours</strong> (${workdays} workdays)</span>`;
+                if(weekendDays > 0 || holidaysFound.length > 0) {
+                    suggestionHtml += `<span class="text-xs block text-gray-400 mt-1">Excludes ${weekendDays} weekend day(s)`;
+                    if(holidaysFound.length > 0) {
+                        suggestionHtml += ` and ${holidaysFound.length} holiday(s): ${holidaysFound.join(', ')}`;
+                    }
+                    suggestionHtml += `</span>`;
+                }
+                ptoSuggestion.innerHTML = suggestionHtml;
+                ptoSuggestion.classList.remove('hidden');
+            }
+
+            // --- Litepicker Initialization ---
+            const picker = new Litepicker({
+                element: document.getElementById('dateRangePicker'),
+                singleMode: false,
+                allowRepick: true,
+                format: 'MM/DD/YYYY',
+                delimiter: ' -> '
+            });
+
+            picker.on('selected', (start, end) => {
+                if (start && end) {
+                    calculatePtoHours(start.dateInstance, end.dateInstance);
+                }
+            });
+
+            picker.on('clear:selection', () => {
+                 ptoSuggestion.classList.add('hidden');
+                 ptoSuggestion.innerHTML = '';
+            });
+
+            // --- EVENT LISTENERS ---
+            [currentStandardPtoInput, currentFlexPtoInput].forEach(input => {
+                input.addEventListener('change', updateTimeline);
+            });
+
+            addVacationBtn.addEventListener('click', () => {
+                const startDate = picker.getStartDate()?.dateInstance;
+                const endDate = picker.getEndDate()?.dateInstance;
+                const standardHours = parseFloat(standardPtoHoursInput.value) || 0;
+                const flexHours = parseFloat(flexPtoHoursInput.value) || 0;
+                const editingId = parseInt(editingVacationIdInput.value);
+
+                if (!startDate || (standardHours <= 0 && flexHours <= 0)) {
+                    console.error('Please provide a valid date range and at least one type of PTO hours.');
+                    return;
+                }
+
+                const vacationData = {
+                    startDate: startDate,
+                    endDate: endDate || startDate,
+                    standardHours,
+                    flexHours
+                };
+
+                if (editingId) {
+                    const index = vacations.findIndex(v => v.id === editingId);
+                    if (index > -1) {
+                        vacations[index] = { ...vacations[index], ...vacationData };
+                    }
+                } else {
+                    vacations.push({ id: Date.now(), ...vacationData });
+                }
+
+                resetVacationForm();
+                updateVacationsList();
+                updateTimeline();
+            });
+
+            cancelEditBtn.addEventListener('click', resetVacationForm);
+
+            function resetVacationForm() {
+                vacationFormTitle.textContent = 'Add Future Vacation';
+                addVacationBtn.textContent = 'Add Vacation';
+                editingVacationIdInput.value = '';
+                picker.clearSelection();
+                standardPtoHoursInput.value = '0';
+                flexPtoHoursInput.value = '0';
+                ptoSuggestion.innerHTML = '';
+                ptoSuggestion.classList.add('hidden');
+                cancelEditBtn.classList.add('hidden');
+            }
+
+            function handleEditClick(id) {
+                const vacation = vacations.find(v => v.id === id);
+                if (vacation) {
+                    vacationFormTitle.textContent = 'Edit Vacation';
+                    addVacationBtn.textContent = 'Update Vacation';
+                    editingVacationIdInput.value = vacation.id;
+                    picker.setDateRange(vacation.startDate, vacation.endDate);
+                    standardPtoHoursInput.value = vacation.standardHours;
+                    flexPtoHoursInput.value = vacation.flexHours;
+                    cancelEditBtn.classList.remove('hidden');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    calculatePtoHours(vacation.startDate, vacation.endDate);
+                }
+            }
+
+            function updateVacationsList() {
+                vacationsList.innerHTML = '';
+                if (vacations.length === 0) {
+                    vacationsList.innerHTML = '<li class="text-gray-400">No vacations scheduled yet.</li>';
+                    return;
+                }
+                vacations.sort((a, b) => a.startDate - b.startDate).forEach(vacation => {
+                    const li = document.createElement('li');
+                    li.className = 'flex justify-between items-center bg-gray-700 p-3 rounded-md';
+                    const dateStr = formatDate(vacation.startDate) === formatDate(vacation.endDate)
+                        ? formatDate(vacation.startDate)
+                        : `${formatDate(vacation.startDate)} -> ${formatDate(vacation.endDate)}`;
+
+                    li.innerHTML = `
+                        <div>
+                            <p class="font-semibold">Vacation on ${dateStr}</p>
+                            <p class="text-sm text-gray-400">Standard: ${vacation.standardHours}h, Flex: ${vacation.flexHours}h</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button data-id="${vacation.id}" class="edit-vacation-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-md">Edit</button>
+                            <button data-id="${vacation.id}" class="remove-vacation-btn bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-md">Remove</button>
+                        </div>
+                    `;
+                    vacationsList.appendChild(li);
+                });
+
+                document.querySelectorAll('.remove-vacation-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const idToRemove = parseInt(e.target.getAttribute('data-id'));
+                        vacations = vacations.filter(v => v.id !== idToRemove);
+                        updateVacationsList();
+                        updateTimeline();
+                    });
+                });
+
+                document.querySelectorAll('.edit-vacation-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        handleEditClick(parseInt(e.target.getAttribute('data-id')));
+                    });
+                });
+            }
+
+            function getInitialFlexAccruedThisYear(today) {
+                let accrued = 0;
+                // Loop through all months up to and including the current month.
+                for (let month = 0; month <= today.getMonth(); month++) {
+                    // Only add accrual if the date is on or after the 1st of that month.
+                    if (month < today.getMonth() || (month === today.getMonth() && today.getDate() >= 1)) {
+                        const amount = month === 0 ? 10 : 8;
+                        const remainingRoom = 48 - accrued;
+                        if (remainingRoom <= 0) break;
+                        accrued += Math.min(amount, remainingRoom);
+                    }
+                }
+                return accrued;
+            }
+
+            function updateTimeline() {
+                timeline.innerHTML = '';
+                const events = generateTimelineEvents();
+
+                const initialStandardPto = parseFloat(currentStandardPtoInput.value) || 0;
+                const initialFlexPto = parseFloat(currentFlexPtoInput.value) || 0;
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                const initialEvent = { date: today, type: 'initial', description: 'Current Balance' };
+                const allEvents = [initialEvent, ...events].sort((a, b) => a.date - b.date);
+                const futureEvents = allEvents.filter(e => e.date >= today || e.type === 'initial');
+
+                let vacationWarningFlags = {};
+                let hasAnyShortage = false;
+
+                // --- PASS 1: Pre-calculation for warnings ---
+                let tempStandard = initialStandardPto;
+                let tempFlex = initialFlexPto;
+                let tempFlexAccruedThisYear = getInitialFlexAccruedThisYear(today);
+                let tempLastYear = today.getFullYear();
+
+                for (const event of futureEvents) {
+                    if (event.date.getFullYear() > tempLastYear) {
+                        tempStandard = Math.min(tempStandard, 160);
+                        tempFlex = Math.min(tempFlex, 48);
+                        tempFlexAccruedThisYear = 0;
+                        tempLastYear = event.date.getFullYear();
+                    }
+
+                    if (event.type === 'accrual') {
+                        tempStandard = Math.min(160, tempStandard + event.standardAmount);
+                        const roomInYearlyBudget = 48 - tempFlexAccruedThisYear;
+                        const actualFlexAccrual = Math.max(0, Math.min(event.flexAmount, roomInYearlyBudget));
+                        tempFlex += actualFlexAccrual;
+                        tempFlexAccruedThisYear += actualFlexAccrual;
+                        tempFlex = Math.min(96, tempFlex);
+                    } else if (event.type === 'vacation') {
+                        tempStandard -= event.standardHours;
+                        tempFlex -= event.flexHours;
+                        if (tempStandard < 0 || tempFlex < 0) {
+                           vacationWarningFlags[event.id] = true;
+                           hasAnyShortage = true;
+                        }
+                    }
+                }
+
+                globalWarningBlock.classList.toggle('hidden', !hasAnyShortage);
+
+                // --- PASS 2: Render the timeline ---
+                let runningStandard = initialStandardPto;
+                let runningFlex = initialFlexPto;
+                let flexAccruedThisYear = getInitialFlexAccruedThisYear(today);
+                let lastYear = today.getFullYear();
+
+                futureEvents.forEach(event => {
+                    let standardChange = 0, flexChange = 0, warning = '', yearEndHtml = '';
+
+                    if (event.date.getFullYear() > lastYear) {
+                        const standardBefore = runningStandard;
+                        runningStandard = Math.min(runningStandard, 160);
+                        const standardLost = standardBefore - runningStandard;
+
+                        const flexBefore = runningFlex;
+                        runningFlex = Math.min(runningFlex, 48);
+                        const flexLost = flexBefore - runningFlex;
+
+                        flexAccruedThisYear = 0;
+
+                        yearEndHtml = `<div class="p-3 my-4 bg-gray-700 rounded-lg shadow-inner">
+                            <h5 class="font-bold text-lg text-white">Year-End Process (${lastYear} -> ${event.date.getFullYear()})</h5>
+                            ${standardLost > 0.01 ? `<p class="text-sm font-semibold text-red-500">Standard PTO forfeited: ${standardLost.toFixed(2)}h</p>` : ''}
+                            ${flexLost > 0.01 ? `<p class="text-sm font-semibold text-red-500">Flex PTO forfeited (over 48h): ${flexLost.toFixed(2)}h</p>` : ''}
+                            <p class="text-sm text-gray-300">New Starting Flex Balance: ${runningFlex.toFixed(2)}h</p>
+                        </div>`;
+                        lastYear = event.date.getFullYear();
+                    }
+
+                    if (event.type === 'accrual') {
+                        const standardBefore = runningStandard;
+                        runningStandard += event.standardAmount;
+                        if (runningStandard > 160) {
+                            if (standardBefore < 160) {
+                                warning += '<p class="text-red-500 font-bold text-sm">Standard PTO reached 160h cap.</p>';
+                            }
+                            runningStandard = 160;
+                        }
+                        standardChange = runningStandard - standardBefore;
+
+                        const flexBefore = runningFlex;
+                        const roomInYearlyBudget = 48 - flexAccruedThisYear;
+                        const actualFlexAccrual = Math.max(0, Math.min(event.flexAmount, roomInYearlyBudget));
+
+                        if (actualFlexAccrual > 0) {
+                            runningFlex += actualFlexAccrual;
+                            flexAccruedThisYear += actualFlexAccrual;
+                        }
+
+                        if (runningFlex > 96) { runningFlex = 96; }
+                        flexChange = runningFlex - flexBefore;
+
+                    } else if (event.type === 'vacation') {
+                        standardChange = -event.standardHours;
+                        flexChange = -event.flexHours;
+                        runningStandard -= event.standardHours;
+                        runningFlex -= event.flexHours;
+
+                        if (vacationWarningFlags[event.id]) {
+                            warning = '<p class="text-red-500 font-bold text-sm">This vacation causes a future PTO shortage!</p>';
+                        }
+                    }
+
+                    const item = document.createElement('div');
+                    item.className = 'timeline-item relative pl-10 pb-10';
+
+                    let changeHtml = '';
+                    if (event.type !== 'initial') {
+                        const standardSign = standardChange >= 0 ? '+' : '';
+                        const flexSign = flexChange >= 0 ? '+' : '';
+                        changeHtml = `<div class="text-sm ${event.type === 'accrual' ? 'text-green-400' : 'text-red-400'}">
+                                <span>Std: ${standardSign}${standardChange.toFixed(2)}h</span> | <span>Flex: ${flexSign}${flexChange.toFixed(2)}h</span>
+                            </div>`;
+                    }
+
+                    const description = event.type === 'vacation'
+                        ? (formatDate(event.startDate) === formatDate(event.endDate)
+                            ? `Vacation on ${formatDate(event.startDate)}`
+                            : `Vacation: ${formatDate(event.startDate)} -> ${formatDate(event.endDate)}`)
+                        : event.description;
+
+
+                    item.innerHTML = `
+                        ${yearEndHtml}
+                        <div class="timeline-dot ${event.type === 'vacation' ? 'bg-red-500' : (event.type === 'initial' ? 'bg-blue-500' : 'bg-green-500')}"></div>
+                        <div class="relative top-[-0.2rem]">
+                            <p class="text-sm text-gray-400">${formatDate(event.date)}</p>
+                            <h4 class="font-semibold text-lg text-white">${description}</h4>
+                            ${changeHtml}
+                            <div class="mt-2 text-md">
+                                <span class="font-bold ${runningStandard < 0 ? 'text-red-500' : 'text-indigo-300'}">Standard: ${runningStandard.toFixed(2)}h</span> |
+                                <span class="font-bold ${runningFlex < 0 ? 'text-red-500' : 'text-cyan-300'}">Flex: ${runningFlex.toFixed(2)}h</span>
+                            </div>
+                            <div class="mt-1">${warning}</div>
+                        </div>
+                    `;
+                    timeline.appendChild(item);
+                });
+            }
+
+            function generateTimelineEvents() {
+                const events = [];
+                const today = new Date();
+                const endDate = new Date(today.getFullYear() + 2, 11, 31);
+                let currentDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                if (today.getDate() > 1) {
+                    currentDate.setMonth(currentDate.getMonth() + 1);
+                }
+
+                while (currentDate <= endDate) {
+                    const standardAccrualDate = new Date('2025-10-01T00:00:00');
+                    const standardAmount = currentDate >= standardAccrualDate ? 13.34 : 10;
+                    const flexAmount = currentDate.getMonth() === 0 ? 10 : 8;
+                    events.push({
+                        date: new Date(currentDate),
+                        type: 'accrual',
+                        description: 'Monthly Accrual',
+                        standardAmount: standardAmount,
+                        flexAmount: flexAmount
+                    });
+                    currentDate.setMonth(currentDate.getMonth() + 1);
+                }
+                vacations.forEach(vacation => events.push({
+                    ...vacation,
+                    date: vacation.startDate,
+                    type: 'vacation'
+                }));
+                return events.sort((a, b) => a.date - b.date);
+            }
+
+            // --- Import/Export Logic ---
+            exportBtn.addEventListener('click', () => {
+                const dataToExport = {
+                    exportDate: new Date().toISOString(),
+                    currentStandardPto: parseFloat(currentStandardPtoInput.value),
+                    currentFlexPto: parseFloat(currentFlexPtoInput.value),
+                    vacations: vacations.map(v => ({...v, startDate: v.startDate.toISOString(), endDate: v.endDate.toISOString()}))
+                };
+                const dataStr = JSON.stringify(dataToExport, null, 2);
+                const blob = new Blob([dataStr], {type: "application/json"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `pto_backup_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+
+            importBtn.addEventListener('click', () => importFile.click());
+
+            importFile.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+
+                        let currentStandard = data.currentStandardPto;
+                        let currentFlex = data.currentFlexPto;
+                        const exportDate = new Date(data.exportDate);
+                        const today = new Date();
+                        today.setHours(0,0,0,0);
+
+                        const importedVacations = data.vacations.map(v => ({
+                            ...v,
+                            startDate: new Date(v.startDate),
+                            endDate: new Date(v.endDate)
+                        }));
+
+                        const eventsToProcess = [];
+                        let tempDate = new Date(exportDate);
+                        tempDate.setHours(0,0,0,0);
+
+                        let accrualDate = new Date(tempDate.getFullYear(), tempDate.getMonth(), 1);
+                        if (tempDate.getDate() > 1) { // If exported after the 1st, start next month
+                            accrualDate.setMonth(accrualDate.getMonth() + 1);
+                        } else { // If exported on the 1st, we need to process this month's accrual if it hasn't happened yet in the file
+                           // The balance in the file is assumed to be PRE-accrual for that day.
+                           // The simplest way is to just start accruals next month.
+                           if (tempDate.getDate() === 1) {
+                               accrualDate.setMonth(accrualDate.getMonth() + 1);
+                           }
+                        }
+
+                        while (accrualDate < today) {
+                            const standardAccrualDate = new Date('2025-10-01T00:00:00');
+                            const standardAmount = accrualDate >= standardAccrualDate ? 13.34 : 10;
+                            const flexAmount = accrualDate.getMonth() === 0 ? 10 : 8;
+                            eventsToProcess.push({
+                                date: new Date(accrualDate),
+                                type: 'accrual',
+                                standardAmount, flexAmount
+                            });
+                            accrualDate.setMonth(accrualDate.getMonth() + 1);
+                        }
+
+                        importedVacations.forEach(vacation => {
+                            if (vacation.startDate >= exportDate && vacation.startDate < today) {
+                                eventsToProcess.push({
+                                    date: vacation.startDate,
+                                    type: 'vacation',
+                                    standardHours: vacation.standardHours,
+                                    flexHours: vacation.flexHours
+                                });
+                            }
+                        });
+
+                        eventsToProcess.sort((a, b) => a.date - b.date);
+
+                        let flexAccruedThisYear = getInitialFlexAccruedThisYear(exportDate);
+                        let lastYear = exportDate.getFullYear();
+
+                        for (const event of eventsToProcess) {
+                            if (event.date.getFullYear() > lastYear) {
+                                currentStandard = Math.min(currentStandard, 160);
+                                currentFlex = Math.min(currentFlex, 48);
+                                flexAccruedThisYear = 0;
+                                lastYear = event.date.getFullYear();
+                            }
+
+                            if (event.type === 'accrual') {
+                                currentStandard = Math.min(160, currentStandard + event.standardAmount);
+                                const roomInYearlyBudget = 48 - flexAccruedThisYear;
+                                const actualFlexAccrual = Math.max(0, Math.min(event.flexAmount, roomInYearlyBudget));
+                                if (actualFlexAccrual > 0) {
+                                    currentFlex += actualFlexAccrual;
+                                    flexAccruedThisYear += actualFlexAccrual;
+                                }
+                                currentFlex = Math.min(96, currentFlex);
+                            } else if (event.type === 'vacation') {
+                                currentStandard -= event.standardHours;
+                                currentFlex -= event.flexHours;
+                            }
+                        }
+
+
+                        currentStandardPtoInput.value = currentStandard.toFixed(2);
+                        currentFlexPtoInput.value = currentFlex.toFixed(2);
+
+                        vacations = importedVacations.filter(v => v.startDate >= today);
+
+                        updateVacationsList();
+                        updateTimeline();
+
+                    } catch (error) {
+                        console.error("Failed to import file:", error);
+                        alert("Error: Could not import the file. It may be corrupted or in the wrong format.");
+                    }
+                };
+                reader.readAsText(file);
+                importFile.value = ''; // Reset file input
+            });
+
+
+            // Initial load
+            resetVacationForm();
+            updateVacationsList();
+            updateTimeline();
+        });
+    </script>
+
+</body>
+</html>
