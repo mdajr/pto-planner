@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTO Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker@2.0.12/dist/css/litepicker.css"/>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 1.25rem;
+            top: 1.25rem;
+            bottom: -1.25rem;
+            width: 2px;
+            background-color: #4a5568;
+            transform: translateX(-50%);
+        }
+        .timeline-item:last-child::before {
+            display: none;
+        }
+        .timeline-dot {
+            position: absolute;
+            left: 1.25rem;
+            top: 1.25rem;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 9999px;
+            transform: translateX(-50%);
+        }
+        /* Style litepicker to match the dark theme */
+        .litepicker {
+            background-color: #1f2937;
+            border-color: #4b5563;
+        }
+        .litepicker, .litepicker .container__months .month-item-header, .litepicker .container__months .month-item {
+             color: #d1d5db;
+        }
+        .litepicker .month-item-day.is-start-date, .litepicker .month-item-day.is-end-date {
+            background-color: #4f46e5 !important;
+            color: white !important;
+        }
+        .litepicker .month-item-day.in-range {
+            background-color: #3730a3 !important;
+            color: white !important;
+        }
+        .litepicker .button-previous-month, .litepicker .button-next-month {
+            color: #9ca3af;
+        }
+        .litepicker .button-previous-month:hover, .litepicker .button-next-month:hover {
+            background-color: #374151;
+        }
+        .litepicker .month-item-day:hover {
+            background-color: #4b5563;
+        }
+        .litepicker .month-item-day.is-today {
+            color: #6366f1;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-white">PTO Planner</h1>
+            <div class="flex space-x-2">
+                <button id="importBtn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Import Data</button>
+                <input type="file" id="importFile" class="hidden" accept=".json">
+                <button id="exportBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md">Export Data</button>
+            </div>
+        </div>
+
+
+        <!-- Inputs Section -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-white">Current Balances</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="currentStandardPto" class="block text-sm font-medium text-gray-300">Standard PTO Balance (hours)</label>
+                    <input type="number" id="currentStandardPto" min="0" step="0.01" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                </div>
+                <div>
+                    <label for="currentFlexPto" class="block text-sm font-medium text-gray-300">Total Flex PTO Balance (hours)</label>
+                    <input type="number" id="currentFlexPto" min="0" step="0.01" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                </div>
+            </div>
+        </div>
+
+        <!-- Add/Edit Vacation Section -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+            <h2 id="vacationFormTitle" class="text-2xl font-semibold mb-4 text-white">Add Future Vacation</h2>
+            <div class="mb-4">
+                 <label for="dateRangePicker" class="block text-sm font-medium text-gray-300">Select Vacation Date Range</label>
+                 <input id="dateRangePicker" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Click to select a date range..."/>
+            </div>
+             <div id="ptoSuggestion" class="text-center text-indigo-300 font-semibold my-4 hidden flex-col justify-center"></div>
+             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                <input type="hidden" id="editingVacationId">
+                <div class="lg:col-span-2">
+                    <label for="vacationName" class="block text-sm font-medium text-gray-300">Vacation Name (optional)</label>
+                    <input type="text" id="vacationName" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., Beach Trip">
+                </div>
+                <div class="lg:col-span-1">
+                    <label for="standardPtoHours" class="block text-sm font-medium text-gray-300">Standard PTO Hours</label>
+                    <input type="number" id="standardPtoHours" min="0" step="0.01" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="8">
+                </div>
+                <div class="lg:col-span-1">
+                    <label for="flexPtoHours" class="block text-sm font-medium text-gray-300">Flex PTO Hours</label>
+                    <input type="number" id="flexPtoHours" min="0" step="0.01" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                </div>
+                <div class="lg:col-span-1">
+                    <button id="addVacationBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500">Add Vacation</button>
+                </div>
+                 <div class="lg:col-span-1">
+                    <button id="cancelEditBtn" class="hidden w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Cancel Edit</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vacations List -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-white">Scheduled Vacations</h2>
+            <ul id="vacationsList" class="space-y-3"></ul>
+        </div>
+
+        <!-- Global Warning Block -->
+        <div id="globalWarningBlock" class="hidden bg-red-900 border-l-4 border-red-500 text-red-100 p-4 rounded-lg shadow-lg mb-8" role="alert" aria-live="polite">
+            <p class="font-bold">Future Balance Warning</p>
+            <p>One or more of your scheduled vacations will result in a negative PTO balance. Check the timeline for details.</p>
+        </div>
+
+        <!-- Timeline Section -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+            <h2 class="text-2xl font-semibold mb-6 text-white">Projected PTO Timeline</h2>
+            <div id="timeline" class="relative"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/litepicker@2.0.12/dist/litepicker.js"></script>
+    <script type="module">
+        import {
+            DEFAULT_CONFIG,
+            formatDate,
+            suggestPtoHours,
+            generateTimelineLedger,
+            toLocalMidnight,
+            exportState,
+            importAndRecalc,
+            serializeDateYMD,
+            parseYMD
+        } from './src/pto-core.js';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM Elements
+            const currentStandardPtoInput = document.getElementById('currentStandardPto');
+            const currentFlexPtoInput = document.getElementById('currentFlexPto');
+            const standardPtoHoursInput = document.getElementById('standardPtoHours');
+            const flexPtoHoursInput = document.getElementById('flexPtoHours');
+            const addVacationBtn = document.getElementById('addVacationBtn');
+            const vacationsList = document.getElementById('vacationsList');
+            const timeline = document.getElementById('timeline');
+            const editingVacationIdInput = document.getElementById('editingVacationId');
+            const vacationFormTitle = document.getElementById('vacationFormTitle');
+            const cancelEditBtn = document.getElementById('cancelEditBtn');
+            const globalWarningBlock = document.getElementById('globalWarningBlock');
+            const ptoSuggestion = document.getElementById('ptoSuggestion');
+            const exportBtn = document.getElementById('exportBtn');
+            const importBtn = document.getElementById('importBtn');
+            const importFile = document.getElementById('importFile');
+            const vacationNameInput = document.getElementById('vacationName');
+
+            let vacations = [];
+
+            function saveLocal() {
+                try {
+                    const data = {
+                        currentStandardPto: parseFloat(currentStandardPtoInput.value) || 0,
+                        currentFlexPto: parseFloat(currentFlexPtoInput.value) || 0,
+                        vacations: vacations.map(v => ({
+                            id: v.id,
+                            startDate: serializeDateYMD(v.startDate),
+                            endDate: serializeDateYMD(v.endDate),
+                            standardHours: v.standardHours,
+                            flexHours: v.flexHours,
+                            name: v.name || ''
+                        }))
+                    };
+                    localStorage.setItem('ptocalc:state', JSON.stringify(data));
+                } catch (e) {
+                    console.warn('Failed to save local state', e);
+                }
+            }
+
+            function loadLocal() {
+                try {
+                    const raw = localStorage.getItem('ptocalc:state');
+                    if (!raw) return;
+                    const data = JSON.parse(raw);
+                    currentStandardPtoInput.value = (Number(data.currentStandardPto) || 0).toString();
+                    currentFlexPtoInput.value = (Number(data.currentFlexPto) || 0).toString();
+                    vacations = (data.vacations || []).map(v => ({
+                        id: v.id,
+                        startDate: parseYMD(v.startDate),
+                        endDate: parseYMD(v.endDate),
+                        standardHours: Number(v.standardHours) || 0,
+                        flexHours: Number(v.flexHours) || 0,
+                        name: v.name || ''
+                    }));
+                } catch (e) {
+                    console.warn('Failed to load local state', e);
+                }
+            }
+            // --- PTO Hour Calculation (uses core) ---
+            function calculatePtoHours(startDate, endDate) {
+                ptoSuggestion.innerHTML = '';
+                if (!startDate || !endDate) {
+                    ptoSuggestion.classList.add('hidden');
+                    return;
+                }
+
+                const { hours, workdays, weekendDays, holidaysFound } = suggestPtoHours(startDate, endDate, DEFAULT_CONFIG);
+                standardPtoHoursInput.value = hours;
+                flexPtoHoursInput.value = 0;
+
+                let suggestionHtml = `<span>Suggested: <strong>${hours} hours</strong> (${workdays} workdays)</span>`;
+                if(weekendDays > 0 || holidaysFound.length > 0) {
+                    suggestionHtml += `<span class="text-xs block text-gray-400 mt-1">Excludes ${weekendDays} weekend day(s)`;
+                    if(holidaysFound.length > 0) {
+                        suggestionHtml += ` and ${holidaysFound.length} holiday(s): ${holidaysFound.join(', ')}`;
+                    }
+                    suggestionHtml += `</span>`;
+                }
+                ptoSuggestion.innerHTML = suggestionHtml;
+                ptoSuggestion.classList.remove('hidden');
+            }
+
+            // --- Litepicker Initialization ---
+            const picker = new Litepicker({
+                element: document.getElementById('dateRangePicker'),
+                singleMode: false,
+                allowRepick: true,
+                firstDay: 0,
+                format: 'MM/DD/YYYY',
+                delimiter: ' -> '
+            });
+
+            picker.on('selected', (start, end) => {
+                if (start && end) {
+                    calculatePtoHours(start.dateInstance, end.dateInstance);
+                }
+            });
+
+            picker.on('clear:selection', () => {
+                 ptoSuggestion.classList.add('hidden');
+                 ptoSuggestion.innerHTML = '';
+            });
+
+            // --- EVENT LISTENERS ---
+            [currentStandardPtoInput, currentFlexPtoInput].forEach(input => {
+                input.addEventListener('change', () => {
+                    // clamp to non-negative
+                    const val = parseFloat(input.value) || 0;
+                    input.value = Math.max(0, val).toString();
+                    saveLocal();
+                    updateTimeline();
+                });
+            });
+
+            addVacationBtn.addEventListener('click', () => {
+                const startDate = picker.getStartDate()?.dateInstance ? toLocalMidnight(picker.getStartDate().dateInstance) : null;
+                const endDate = picker.getEndDate()?.dateInstance ? toLocalMidnight(picker.getEndDate().dateInstance) : null;
+                const standardHours = parseFloat(standardPtoHoursInput.value) || 0;
+                const flexHours = parseFloat(flexPtoHoursInput.value) || 0;
+                const editingId = parseInt(editingVacationIdInput.value);
+                const name = (vacationNameInput.value || '').trim();
+
+                if (!startDate || (standardHours <= 0 && flexHours <= 0)) {
+                    console.error('Please provide a valid date range and at least one type of PTO hours.');
+                    return;
+                }
+
+                const vacationData = {
+                    startDate: startDate,
+                    endDate: endDate || startDate,
+                    standardHours,
+                    flexHours,
+                    name
+                };
+
+                if (editingId) {
+                    const index = vacations.findIndex(v => v.id === editingId);
+                    if (index > -1) {
+                        vacations[index] = { ...vacations[index], ...vacationData };
+                    }
+                } else {
+                    vacations.push({ id: Date.now(), ...vacationData });
+                }
+
+                saveLocal();
+                resetVacationForm();
+                updateVacationsList();
+                updateTimeline();
+            });
+
+            cancelEditBtn.addEventListener('click', resetVacationForm);
+
+            function resetVacationForm() {
+                vacationFormTitle.textContent = 'Add Future Vacation';
+                addVacationBtn.textContent = 'Add Vacation';
+                editingVacationIdInput.value = '';
+                picker.clearSelection();
+                standardPtoHoursInput.value = '0';
+                flexPtoHoursInput.value = '0';
+                vacationNameInput.value = '';
+                ptoSuggestion.innerHTML = '';
+                ptoSuggestion.classList.add('hidden');
+                cancelEditBtn.classList.add('hidden');
+            }
+
+            function handleEditClick(id) {
+                const vacation = vacations.find(v => v.id === id);
+                if (vacation) {
+                    vacationFormTitle.textContent = 'Edit Vacation';
+                    addVacationBtn.textContent = 'Update Vacation';
+                    editingVacationIdInput.value = vacation.id;
+                    picker.setDateRange(vacation.startDate, vacation.endDate);
+                    standardPtoHoursInput.value = vacation.standardHours;
+                    flexPtoHoursInput.value = vacation.flexHours;
+                    vacationNameInput.value = vacation.name || '';
+                    cancelEditBtn.classList.remove('hidden');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    calculatePtoHours(vacation.startDate, vacation.endDate);
+                }
+            }
+
+            function updateVacationsList() {
+                vacationsList.innerHTML = '';
+                if (vacations.length === 0) {
+                    vacationsList.innerHTML = '<li class="text-gray-400">No vacations scheduled yet.</li>';
+                    return;
+                }
+                vacations.sort((a, b) => a.startDate - b.startDate).forEach(vacation => {
+                    const li = document.createElement('li');
+                    li.className = 'flex justify-between items-center bg-gray-700 p-3 rounded-md';
+                    const dateStr = formatDate(vacation.startDate) === formatDate(vacation.endDate)
+                        ? formatDate(vacation.startDate)
+                        : `${formatDate(vacation.startDate)} -> ${formatDate(vacation.endDate)}`;
+
+                    li.innerHTML = `
+                        <div>
+                            <p class="font-semibold">Vacation on ${dateStr}${vacation.name ? ` - ${vacation.name}` : ''}</p>
+                            <p class="text-sm text-gray-400">Standard: ${vacation.standardHours}h, Flex: ${vacation.flexHours}h</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button data-id="${vacation.id}" class="edit-vacation-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-md">Edit</button>
+                            <button data-id="${vacation.id}" class="remove-vacation-btn bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-md">Remove</button>
+                        </div>
+                    `;
+                    vacationsList.appendChild(li);
+                });
+
+                document.querySelectorAll('.remove-vacation-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const idToRemove = parseInt(e.target.getAttribute('data-id'));
+                        vacations = vacations.filter(v => v.id !== idToRemove);
+                        saveLocal();
+                        updateVacationsList();
+                        updateTimeline();
+                    });
+                });
+
+                document.querySelectorAll('.edit-vacation-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        handleEditClick(parseInt(e.target.getAttribute('data-id')));
+                    });
+                });
+            }
+
+            function updateTimeline() {
+                timeline.innerHTML = '';
+                const initialStandardPto = parseFloat(currentStandardPtoInput.value) || 0;
+                const initialFlexPto = parseFloat(currentFlexPtoInput.value) || 0;
+                const today = toLocalMidnight(new Date());
+
+                const ledger = generateTimelineLedger(today, initialStandardPto, initialFlexPto, vacations, 2, DEFAULT_CONFIG);
+
+                globalWarningBlock.classList.toggle('hidden', !ledger.hasAnyShortage);
+
+                ledger.events.forEach(event => {
+                    const item = document.createElement('div');
+                    item.className = 'timeline-item relative pl-10 pb-10';
+
+                    let warning = '';
+                    if (event.type === 'vacation' && event.causesShortage) {
+                        warning = '<div class="p-2 bg-red-900 border border-red-500 text-red-100 rounded-md"><p class="font-bold text-sm">Insufficient PTO for this vacation!</p></div>';
+                    }
+
+                    let changeHtml = '';
+                    if (event.type !== 'initial') {
+                        const standardSign = (event.standardChange || 0) >= 0 ? '+' : '';
+                        const flexSign = (event.flexChange || 0) >= 0 ? '+' : '';
+                        const color = event.type === 'accrual' ? 'text-green-400' : 'text-red-400';
+                        changeHtml = `<div class="text-sm ${color}">\n                                <span>Std: ${standardSign}${(event.standardChange || 0).toFixed(2)}h</span> | <span>Flex: ${flexSign}${(event.flexChange || 0).toFixed(2)}h</span>\n                            </div>`;
+                    }
+
+                    // Additional warnings/info
+                    let capInfoHtml = '';
+                    let yearEndHtml = '';
+                    // Cap reached notices on accrual events
+                    if (event.type === 'accrual') {
+                        const stdBefore = (event.runningStandard || 0) - (event.standardChange || 0);
+                        const flexBefore = (event.runningFlex || 0) - (event.flexChange || 0);
+                        if ((event.standardChange || 0) > 0 && event.runningStandard >= DEFAULT_CONFIG.standard.cap - 1e-6 && stdBefore < DEFAULT_CONFIG.standard.cap - 1e-6) {
+                            capInfoHtml += '<p class="text-red-500 font-bold text-sm">Standard PTO reached 160h cap.</p>';
+                        }
+                        if ((event.flexChange || 0) > 0 && event.runningFlex >= DEFAULT_CONFIG.flex.balanceCap - 1e-6 && flexBefore < DEFAULT_CONFIG.flex.balanceCap - 1e-6) {
+                            capInfoHtml += '<p class="text-red-500 font-bold text-sm">Flex PTO reached 96h balance cap.</p>';
+                        }
+                    }
+                    // Year-end rollover info merged into Jan 1 accrual
+                    if (event.yearEndInfo) {
+                        const lostStd = event.yearEndInfo.lostStandard || 0;
+                        const lostFlex = event.yearEndInfo.lostFlex || 0;
+                        const anyLoss = (lostStd > 0.01) || (lostFlex > 0.01);
+                        yearEndHtml = `<div class="p-3 mb-3 bg-gray-700 rounded-lg shadow-inner">
+                            <h5 class="font-bold text-lg text-white">${event.yearEndInfo.fromYear} -> ${event.yearEndInfo.toYear} rollover</h5>
+                            ${lostStd > 0.01 ? `<p class=\"text-sm font-semibold text-red-500\">Standard PTO forfeited: ${lostStd.toFixed(2)}h</p>` : ''}
+                            ${lostFlex > 0.01 ? `<p class=\"text-sm font-semibold text-red-500\">Flex PTO forfeited (over 48h): ${lostFlex.toFixed(2)}h</p>` : ''}
+                            ${!anyLoss ? `<p class=\"text-sm text-gray-300\">No PTO forfeited at rollover.</p>` : ''}
+                        </div>`;
+                    }
+
+                    const description = event.type === 'vacation'
+                        ? (formatDate(event.startDate) === formatDate(event.endDate)
+                            ? `Vacation on ${formatDate(event.startDate)}`
+                            : `Vacation: ${formatDate(event.startDate)} -> ${formatDate(event.endDate)}`) + (event.name ? ` - ${event.name}` : '')
+                        : event.description;
+
+                    const dotColor = event.type === 'vacation' ? 'bg-red-500' : (event.type === 'initial' ? 'bg-blue-500' : 'bg-green-500');
+
+                    item.innerHTML = `
+                        ${yearEndHtml}
+                        <div class="timeline-dot ${dotColor}"></div>
+                        <div class="relative top-[-0.2rem]">
+                            <p class="text-sm text-gray-400">${formatDate(event.date)}</p>
+                            <h4 class="font-semibold text-lg text-white">${description}</h4>
+                            ${changeHtml}
+                            ${capInfoHtml}
+                            <div class="mt-2 text-md">
+                                <span class="font-bold ${event.runningStandard < 0 ? 'text-red-500' : 'text-indigo-300'}">Standard: ${event.runningStandard.toFixed(2)}h</span> |
+                                <span class="font-bold ${event.runningFlex < 0 ? 'text-red-500' : 'text-cyan-300'}">Flex: ${event.runningFlex.toFixed(2)}h</span>
+                            </div>
+                            <div class="mt-1">${warning}</div>
+                        </div>
+                    `;
+                    timeline.appendChild(item);
+                });
+            }
+
+            // --- Import/Export Logic ---
+            exportBtn.addEventListener('click', () => {
+                const dataToExport = exportState(new Date(), parseFloat(currentStandardPtoInput.value), parseFloat(currentFlexPtoInput.value), vacations);
+                const dataStr = JSON.stringify(dataToExport, null, 2);
+                const blob = new Blob([dataStr], {type: "application/json"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `pto_backup_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+
+            importBtn.addEventListener('click', () => importFile.click());
+
+            importFile.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        const today = toLocalMidnight(new Date());
+                        const result = importAndRecalc(data, today, DEFAULT_CONFIG);
+
+                        currentStandardPtoInput.value = result.currentStandard.toFixed(2);
+                        currentFlexPtoInput.value = result.currentFlex.toFixed(2);
+
+                        vacations = result.futureVacations;
+                        saveLocal();
+
+                        updateVacationsList();
+                        updateTimeline();
+
+                    } catch (error) {
+                        console.error("Failed to import file:", error);
+                        alert("Error: Could not import the file. It may be corrupted or in the wrong format.");
+                    }
+                };
+                reader.readAsText(file);
+                importFile.value = ''; // Reset file input
+            });
+
+
+            // Initial load
+            loadLocal();
+            resetVacationForm();
+            updateVacationsList();
+            updateTimeline();
+        });
+    </script>
+
+</body>
+</html>
