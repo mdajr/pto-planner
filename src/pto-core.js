@@ -3,7 +3,10 @@
 export const DEFAULT_CONFIG = {
   // Standard PTO
   standard: {
-    monthlyRate: 13.34, // hours per month, deposited on the 1st
+    // Tenure-based monthly rates (hours per month)
+    firstYearRate: 6.67,
+    years1to5Rate: 10,
+    years6plusRate: 13.34,
     cap: 160 // rollover and balance cap
   },
   // Flex PTO
@@ -136,7 +139,25 @@ export function getInitialFlexAccruedThisYear(today, config = DEFAULT_CONFIG) {
   return accrued;
 }
 
-export function generateAccrualEvents(baseDate, yearsAhead = 2, config = DEFAULT_CONFIG) {
+export function completedYearsOfService(hireDate, onDate) {
+  if (!hireDate || !(hireDate instanceof Date) || isNaN(hireDate)) return 0;
+  const h = toLocalMidnight(hireDate);
+  const d = toLocalMidnight(onDate);
+  let years = d.getFullYear() - h.getFullYear();
+  const anniv = new Date(d.getFullYear(), h.getMonth(), h.getDate());
+  if (d < anniv) years -= 1;
+  return Math.max(0, years);
+}
+
+export function standardMonthlyRateForDate(hireDate, accrualDate, config = DEFAULT_CONFIG) {
+  if (!hireDate) return config.standard.years6plusRate;
+  const years = completedYearsOfService(hireDate, accrualDate);
+  if (years < 1) return config.standard.firstYearRate;
+  if (years < 6) return config.standard.years1to5Rate;
+  return config.standard.years6plusRate;
+}
+
+export function generateAccrualEvents(baseDate, yearsAhead = 2, config = DEFAULT_CONFIG, hireDate = null) {
   const today = toLocalMidnight(baseDate);
   const endDate = new Date(today.getFullYear() + yearsAhead, 11, 31);
   const events = [];
@@ -144,7 +165,7 @@ export function generateAccrualEvents(baseDate, yearsAhead = 2, config = DEFAULT
   if (today.getDate() > 1) current.setMonth(current.getMonth() + 1);
 
   while (current <= endDate) {
-    const standardAmount = config.standard.monthlyRate;
+    const standardAmount = standardMonthlyRateForDate(hireDate, current, config);
     const flexAmount = current.getMonth() === 0 ? config.flex.janMonthly : config.flex.otherMonthly;
     events.push({
       date: new Date(current),
@@ -176,7 +197,7 @@ export function applyEventsWithCaps(initialStandard, initialFlex, events, startD
 
     if (event.type === 'accrual') {
       // Standard accrual and cap
-      standard += event.standardAmount ?? config.standard.monthlyRate;
+      standard += event.standardAmount ?? config.standard.years6plusRate;
       if (standard > config.standard.cap) standard = config.standard.cap;
 
       // Flex accrual, respect annual credited cap and balance cap
@@ -233,9 +254,9 @@ export function expandVacationDays(vacation, config = DEFAULT_CONFIG) {
 }
 
 // Generate a timeline ledger: accruals, year-end rollover entries, and aggregated vacation entries for display.
-export function generateTimelineLedger(today, initialStandard, initialFlex, vacations, yearsAhead = 2, config = DEFAULT_CONFIG) {
+export function generateTimelineLedger(today, initialStandard, initialFlex, vacations, yearsAhead = 2, config = DEFAULT_CONFIG, hireDate = null) {
   const t0 = toLocalMidnight(today);
-  const accruals = generateAccrualEvents(t0, yearsAhead, config);
+  const accruals = generateAccrualEvents(t0, yearsAhead, config, hireDate);
 
   // Expand vacations into daily deduction events, but also keep aggregated display items
   const vacationDailyEvents = [];
@@ -403,12 +424,13 @@ export function parseYMD(s) {
   return fromYMD(y, m, d);
 }
 
-export function exportState(now, currentStandard, currentFlex, vacations) {
+export function exportState(now, currentStandard, currentFlex, vacations, hireDate = null) {
   const exportDate = serializeDateYMD(now);
   return {
     exportDate,
     currentStandardPto: currentStandard,
     currentFlexPto: currentFlex,
+    hireDate: hireDate ? serializeDateYMD(hireDate) : null,
     vacations: vacations.map(v => ({
       ...v,
       startDate: serializeDateYMD(v.startDate),
@@ -422,6 +444,7 @@ export function importAndRecalc(data, today, config = DEFAULT_CONFIG) {
   const t = toLocalMidnight(today);
   let currentStandard = Number(data.currentStandardPto) || 0;
   let currentFlex = Number(data.currentFlexPto) || 0;
+  const hireDate = data.hireDate ? parseYMD(data.hireDate) : null;
 
   const importedVacations = (data.vacations || []).map(v => ({
     ...v,
@@ -436,7 +459,7 @@ export function importAndRecalc(data, today, config = DEFAULT_CONFIG) {
     accrualDate.setMonth(accrualDate.getMonth() + 1);
   }
   while (accrualDate < t) {
-    const standardAmount = config.standard.monthlyRate;
+    const standardAmount = standardMonthlyRateForDate(hireDate, accrualDate, config);
     const flexAmount = accrualDate.getMonth() === 0 ? config.flex.janMonthly : config.flex.otherMonthly;
     events.push({ date: new Date(accrualDate), type: 'accrual', standardAmount, flexAmount });
     accrualDate.setMonth(accrualDate.getMonth() + 1);

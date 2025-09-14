@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+
+function closeTo(actual, expected, eps = 1e-2) {
+  assert.ok(Math.abs(actual - expected) < eps, `Expected ${actual} ≈ ${expected} (±${eps})`);
+}
 import {
   DEFAULT_CONFIG,
   formatDate,
@@ -67,10 +71,10 @@ test('generates monthly accrual events on the 1st with constant 13.34 standard',
   assert.equal(first.date.getFullYear(), 2025);
   assert.equal(first.date.getMonth(), 9); // October
   assert.equal(first.date.getDate(), 1);
-  assert.ok(Math.abs(first.standardAmount - 13.34) < 1e-2);
+  closeTo(first.standardAmount, 13.34);
   const second = events[1];
   assert.equal(second.date.getMonth(), 10); // November
-  assert.ok(Math.abs(second.standardAmount - 13.34) < 1e-2);
+  closeTo(second.standardAmount, 13.34);
 });
 
 test('standard accrual caps at 160 balance', () => {
@@ -118,7 +122,7 @@ test('import/export reconciliation applies accruals and vacations with caps and 
 
   // From Jun 15 to Aug 2 -> accruals on Jul 1 and Aug 1, and the June 20 vacation applies.
   // Standard: 120 - 16 + 13.34 + 13.34 = 130.68
-  assert.ok(Math.abs(currentStandard - 130.68) < 1e-2);
+  closeTo(currentStandard, 130.68);
 
   // Flex: annual credited cap is reached by mid-June per baseline; no further accrual posts.
   assert.equal(currentFlex, 20);
@@ -126,6 +130,64 @@ test('import/export reconciliation applies accruals and vacations with caps and 
   // Future vacation remains (start 2026-06-20 is before today 2026-08-02, so it should have been applied if between export and today).
   // Our export future (relative to export) but past relative to today; it should have been processed, so future list should be empty.
   assert.equal(futureVacations.length, 0);
+});
+
+test('import applies vacations since export and accruals since export', () => {
+  // Export mid-March with 80h standard, 0 flex; vacation of 40h on Mar 20; import on Apr 2
+  const exportDate = '2025-03-10';
+  const data = {
+    exportDate,
+    currentStandardPto: 80,
+    currentFlexPto: 0,
+    vacations: [
+      { id: 1, startDate: '2025-03-20', endDate: '2025-03-20', standardHours: 40, flexHours: 0 }
+    ]
+  };
+  const today = fromYMD(2025, 4, 2); // Apr 2, 2025
+  const { currentStandard, currentFlex, futureVacations } = importAndRecalc(data, today, DEFAULT_CONFIG);
+  // Expect: 80 - 40 (vacation Mar 20) + 13.34 (accrual Apr 1) = 53.34
+  closeTo(currentStandard, 53.34);
+  // Flex accrues 8 on Apr 1
+  assert.equal(currentFlex, 8);
+  // No future vacations left (Mar 20 is in the past relative to today)
+  assert.equal(futureVacations.length, 0);
+});
+
+test('import reconciliation respects tenure accrual rate (first year 6.67)', () => {
+  // Export mid-March with 80h standard and a 40h vacation; import on Apr 2 with hire date in Feb (first-year rate)
+  const data = {
+    exportDate: '2025-03-10',
+    currentStandardPto: 80,
+    currentFlexPto: 0,
+    hireDate: '2025-02-15', // < 1 year as of Apr 1, so 6.67 accrual
+    vacations: [
+      { id: 1, startDate: '2025-03-20', endDate: '2025-03-20', standardHours: 40, flexHours: 0 }
+    ]
+  };
+  const today = fromYMD(2025, 4, 2); // Apr 2, 2025
+  const { currentStandard, currentFlex, futureVacations } = importAndRecalc(data, today, DEFAULT_CONFIG);
+  // Expect: 80 - 40 + 6.67 (first-year accrual on Apr 1) = 46.67
+  closeTo(currentStandard, 46.67);
+  assert.equal(currentFlex, 8);
+  assert.equal(futureVacations.length, 0);
+});
+
+test('import reconciliation applies rate change when crossing tenure anniversary', () => {
+  // Export: Mar 10, 2025; Today: May 20, 2025
+  // Hire Date: Apr 15, 2024 -> Apr 1 accrual uses first-year 6.67; May 1 uses 10.00
+  const data = {
+    exportDate: '2025-03-10',
+    currentStandardPto: 0,
+    currentFlexPto: 0,
+    hireDate: '2024-04-15',
+    vacations: []
+  };
+  const today = fromYMD(2025, 5, 20);
+  const { currentStandard, currentFlex } = importAndRecalc(data, today, DEFAULT_CONFIG);
+  // Apr 1: 6.67, May 1: 10.00 -> total 16.67
+  closeTo(currentStandard, (6.67 + 10));
+  // Flex: Apr 1 8h + May 1 8h = 16
+  assert.equal(currentFlex, 16);
 });
 
 test('expandVacationDays splits hours over workdays, skipping weekends/holidays', () => {

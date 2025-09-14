@@ -77,8 +77,10 @@
         </div>
 
 
-        <!-- Inputs Section -->
-        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+        <!-- Top Two-Column Panel: Current Balances (left) and Employment Info (right) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        <!-- Current Balances -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
             <h2 class="text-2xl font-semibold mb-4 text-white">Current Balances</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -86,10 +88,26 @@
                     <input type="number" id="currentStandardPto" min="0" step="0.01" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
                 </div>
                 <div>
-                    <label for="currentFlexPto" class="block text-sm font-medium text-gray-300">Total Flex PTO Balance (hours)</label>
+                    <label for="currentFlexPto" class="block text-sm font-medium text-gray-300">Flex PTO Balance (hours)</label>
                     <input type="number" id="currentFlexPto" min="0" step="0.01" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
                 </div>
             </div>
+        </div>
+        
+        <!-- Employment Info -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+            <h2 class="text-2xl font-semibold mb-4 text-white">Employment Info</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="hireDate" class="block text-sm font-medium text-gray-300">Hire Date</label>
+                    <input type="date" id="hireDate" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+            </div>
+            <div id="hireDateWarningBlock" class="hidden mt-4 bg-yellow-900 border-l-4 border-yellow-500 text-yellow-100 p-4 rounded-lg shadow-lg" role="alert" aria-live="polite">
+                <p class="font-bold">Missing Hire Date</p>
+                <p>Enter your hire date to compute accurate accrual rates for the timeline.</p>
+            </div>
+        </div>
         </div>
 
         <!-- Add/Edit Vacation Section -->
@@ -173,15 +191,24 @@
             const exportBtn = document.getElementById('exportBtn');
             const importBtn = document.getElementById('importBtn');
             const importFile = document.getElementById('importFile');
+            const hireDateInput = document.getElementById('hireDate');
+            const hireDateWarningBlock = document.getElementById('hireDateWarningBlock');
             const vacationNameInput = document.getElementById('vacationName');
 
             let vacations = [];
+
+            function escapeHtml(str) {
+                return String(str).replace(/[&<>"']/g, (ch) => ({
+                    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+                })[ch]);
+            }
 
             function saveLocal() {
                 try {
                     const data = {
                         currentStandardPto: parseFloat(currentStandardPtoInput.value) || 0,
                         currentFlexPto: parseFloat(currentFlexPtoInput.value) || 0,
+                        hireDate: hireDateInput.value || '',
                         vacations: vacations.map(v => ({
                             id: v.id,
                             startDate: serializeDateYMD(v.startDate),
@@ -204,6 +231,7 @@
                     const data = JSON.parse(raw);
                     currentStandardPtoInput.value = (Number(data.currentStandardPto) || 0).toString();
                     currentFlexPtoInput.value = (Number(data.currentFlexPto) || 0).toString();
+                    if (data.hireDate) hireDateInput.value = data.hireDate;
                     vacations = (data.vacations || []).map(v => ({
                         id: v.id,
                         startDate: parseYMD(v.startDate),
@@ -212,6 +240,7 @@
                         flexHours: Number(v.flexHours) || 0,
                         name: v.name || ''
                     }));
+                    updateHireDateWarning();
                 } catch (e) {
                     console.warn('Failed to load local state', e);
                 }
@@ -270,6 +299,31 @@
                     saveLocal();
                     updateTimeline();
                 });
+            });
+
+            function updateHireDateWarning() {
+                const val = hireDateInput.value;
+                if (!val) {
+                    hireDateWarningBlock.classList.remove('hidden');
+                    hireDateWarningBlock.querySelector('p.font-bold').textContent = 'Missing Hire Date';
+                    hireDateWarningBlock.querySelectorAll('p')[1].textContent = 'Enter your hire date to compute accurate accrual rates for the timeline.';
+                    return;
+                }
+                const d = new Date(val);
+                const today = toLocalMidnight(new Date());
+                if (toLocalMidnight(d) > today) {
+                    hireDateWarningBlock.classList.remove('hidden');
+                    hireDateWarningBlock.querySelector('p.font-bold').textContent = 'Invalid Hire Date';
+                    hireDateWarningBlock.querySelectorAll('p')[1].textContent = 'Hire date cannot be in the future.';
+                } else {
+                    hireDateWarningBlock.classList.add('hidden');
+                }
+            }
+
+            hireDateInput.addEventListener('change', () => {
+                updateHireDateWarning();
+                saveLocal();
+                updateTimeline();
             });
 
             addVacationBtn.addEventListener('click', () => {
@@ -354,7 +408,7 @@
 
                     li.innerHTML = `
                         <div>
-                            <p class="font-semibold">Vacation on ${dateStr}${vacation.name ? ` - ${vacation.name}` : ''}</p>
+                            <p class="font-semibold">${dateStr}${vacation.name ? ` - ${escapeHtml(vacation.name)}` : ''}</p>
                             <p class="text-sm text-gray-400">Standard: ${vacation.standardHours}h, Flex: ${vacation.flexHours}h</p>
                         </div>
                         <div class="flex space-x-2">
@@ -387,8 +441,9 @@
                 const initialStandardPto = parseFloat(currentStandardPtoInput.value) || 0;
                 const initialFlexPto = parseFloat(currentFlexPtoInput.value) || 0;
                 const today = toLocalMidnight(new Date());
+                const hireDate = hireDateInput.value ? toLocalMidnight(new Date(hireDateInput.value)) : null;
 
-                const ledger = generateTimelineLedger(today, initialStandardPto, initialFlexPto, vacations, 2, DEFAULT_CONFIG);
+                const ledger = generateTimelineLedger(today, initialStandardPto, initialFlexPto, vacations, 2, DEFAULT_CONFIG, hireDate);
 
                 globalWarningBlock.classList.toggle('hidden', !ledger.hasAnyShortage);
 
@@ -465,7 +520,8 @@
 
             // --- Import/Export Logic ---
             exportBtn.addEventListener('click', () => {
-                const dataToExport = exportState(new Date(), parseFloat(currentStandardPtoInput.value), parseFloat(currentFlexPtoInput.value), vacations);
+                const hireDate = hireDateInput.value ? toLocalMidnight(new Date(hireDateInput.value)) : null;
+                const dataToExport = exportState(new Date(), parseFloat(currentStandardPtoInput.value), parseFloat(currentFlexPtoInput.value), vacations, hireDate);
                 const dataStr = JSON.stringify(dataToExport, null, 2);
                 const blob = new Blob([dataStr], {type: "application/json"});
                 const url = URL.createObjectURL(blob);
@@ -493,6 +549,7 @@
 
                         currentStandardPtoInput.value = result.currentStandard.toFixed(2);
                         currentFlexPtoInput.value = result.currentFlex.toFixed(2);
+                        if (data.hireDate) hireDateInput.value = data.hireDate;
 
                         vacations = result.futureVacations;
                         saveLocal();
