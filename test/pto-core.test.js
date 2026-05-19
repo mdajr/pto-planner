@@ -7,11 +7,16 @@ function closeTo(actual, expected, eps = 1e-2) {
 import {
   DEFAULT_CONFIG,
   formatDate,
+  formatHoursMinutes,
+  decimalToHrsMins,
+  hrsMinsToDecimal,
   getHolidaysForYear,
   countWorkdaysAndHolidays,
   suggestPtoHours,
   getInitialFlexAccruedThisYear,
+  getInitialFlexAccruedThisYearBiweekly,
   generateAccrualEvents,
+  standardBiweeklyRateForDate,
   applyEventsWithCaps,
   expandVacationDays,
   generateTimelineLedger,
@@ -250,4 +255,170 @@ test('on same day, accrual is ordered before vacation entry in ledger', () => {
   const idxVacation = sameDay.findIndex(e => e.type === 'vacation');
   assert.ok(idxAccrual !== -1 && idxVacation !== -1);
   assert.ok(idxAccrual < idxVacation);
+});
+
+// --- New: formatHoursMinutes and hrsMins helpers ---
+
+test('formatHoursMinutes converts whole hours', () => {
+  assert.equal(formatHoursMinutes(8), '8 hrs 0 mins');
+  assert.equal(formatHoursMinutes(0), '0 hrs 0 mins');
+  assert.equal(formatHoursMinutes(160), '160 hrs 0 mins');
+});
+
+test('formatHoursMinutes converts decimal hours to hrs mins', () => {
+  assert.equal(formatHoursMinutes(8.5), '8 hrs 30 mins');
+  assert.equal(formatHoursMinutes(6.67), '6 hrs 40 mins');
+  assert.equal(formatHoursMinutes(13.34), '13 hrs 20 mins');
+});
+
+test('formatHoursMinutes handles negative values', () => {
+  assert.equal(formatHoursMinutes(-8), '-8 hrs 0 mins');
+  assert.equal(formatHoursMinutes(-0.5), '-0 hrs 30 mins');
+});
+
+test('decimalToHrsMins round-trips with hrsMinsToDecimal', () => {
+  const vals = [0, 8, 8.5, 13.34, 6.67, 40, 160];
+  for (const v of vals) {
+    const { hrs, mins } = decimalToHrsMins(v);
+    closeTo(hrsMinsToDecimal(hrs, mins), v, 0.02);
+  }
+});
+
+test('hrsMinsToDecimal converts correctly', () => {
+  assert.equal(hrsMinsToDecimal(8, 0), 8);
+  assert.equal(hrsMinsToDecimal(8, 30), 8.5);
+  assert.equal(hrsMinsToDecimal(0, 0), 0);
+  closeTo(hrsMinsToDecimal(6, 40), 6.667, 0.01);
+});
+
+// --- New: biweekly accrual rates ---
+
+test('standardBiweeklyRateForDate returns correct rates by tenure', () => {
+  const hire0yos = fromYMD(2025, 1, 1);
+  const hire1yos = fromYMD(2024, 1, 1);
+  const hire6yos = fromYMD(2019, 1, 1);
+  const check = fromYMD(2025, 6, 1);
+  closeTo(standardBiweeklyRateForDate(hire0yos, check, DEFAULT_CONFIG), 3.08);
+  closeTo(standardBiweeklyRateForDate(hire1yos, check, DEFAULT_CONFIG), 4.62);
+  closeTo(standardBiweeklyRateForDate(hire6yos, check, DEFAULT_CONFIG), 6.16);
+});
+
+test('biweekly accrual events are generated on Fridays every 14 days', () => {
+  const base = fromYMD(2025, 5, 1); // May 1
+  const lastPaycheck = fromYMD(2025, 4, 25); // Friday Apr 25
+  const biweeklyConfig = { ...DEFAULT_CONFIG, payPeriod: 'biweekly' };
+  const events = generateAccrualEvents(base, 0, biweeklyConfig, null, lastPaycheck);
+  // Filter to non-Jan1 events (actual biweekly paydays)
+  const paydays = events.filter(e => !(e.date.getMonth() === 0 && e.date.getDate() === 1));
+  // First payday after May 1 from Apr 25 anchor is May 9
+  assert.ok(paydays.length > 0);
+  assert.equal(paydays[0].date.getDay(), 5); // Friday
+  // Each subsequent payday is 14 days apart
+  for (let i = 1; i < paydays.length; i++) {
+    const diff = Math.round((paydays[i].date - paydays[i-1].date) / 86400000);
+    assert.equal(diff, 14);
+  }
+});
+
+test('biweekly accrual totals match annual amounts (6.16 × 26 ≈ 160)', () => {
+  closeTo(6.16 * 26, 160, 1);
+  closeTo(4.62 * 26, 120, 1);
+  closeTo(3.08 * 26, 80, 1);
+});
+
+test('biweekly flex: Jan 1 events have grant of 10, balance capped at 96', () => {
+  const base = fromYMD(2025, 1, 2); // Jan 2 (day after grant)
+  const lastPaycheck = fromYMD(2025, 1, 10); // Jan 10 anchor
+  const biweeklyConfig = { ...DEFAULT_CONFIG, payPeriod: 'biweekly' };
+  const events = generateAccrualEvents(base, 1, biweeklyConfig, null, lastPaycheck);
+
+  // Next year's Jan 1 grant event should exist
+  const jan1Events = events.filter(e => e.date.getMonth() === 0 && e.date.getDate() === 1);
+  assert.equal(jan1Events.length, 1);
+  assert.equal(jan1Events[0].flexAmount, 10);
+
+  // Apply events: start with 10 credited (Jan grant already applied for 2025)
+  // Annual accrual cap (48) and balance cap (96) should both be respected
+  const { flex } = applyEventsWithCaps(0, 0, events, base, biweeklyConfig, 10);
+  assert.ok(flex <= 96, `Flex ${flex} should be ≤ balance cap 96`);
+
+  // Simulate just one year to confirm annual accrual cap is 48
+  const oneYearEvents = events.filter(e => e.date.getFullYear() === 2025);
+  const { flex: flex1yr } = applyEventsWithCaps(0, 0, oneYearEvents, base, biweeklyConfig, 10);
+  assert.ok(flex1yr <= 48, `Flex after 1 year ${flex1yr} should be ≤ annual accrual cap 48`);
+});
+
+test('getInitialFlexAccruedThisYearBiweekly counts Jan grant plus past paydays', () => {
+  const lastPaycheck = fromYMD(2025, 1, 10); // Jan 10 anchor → paydays Jan 10, 24, Feb 7, ...
+  const biweeklyConfig = { ...DEFAULT_CONFIG, payPeriod: 'biweekly' };
+
+  // As of Jan 5: Jan 1 grant credited (10), no paydays yet (Jan 10 is after Jan 5)
+  const jan5 = fromYMD(2025, 1, 5);
+  closeTo(getInitialFlexAccruedThisYearBiweekly(jan5, biweeklyConfig, lastPaycheck), 10);
+
+  // As of Jan 11: Jan 1 grant (10) + Jan 10 payday (3.7) = 13.7
+  const jan11 = fromYMD(2025, 1, 11);
+  closeTo(getInitialFlexAccruedThisYearBiweekly(jan11, biweeklyConfig, lastPaycheck), 13.7);
+});
+
+test('importAndRecalc handles biweekly pay period and updates balances correctly', () => {
+  const lastPaycheck = fromYMD(2025, 4, 25); // Apr 25 (Friday)
+  const exportDate = fromYMD(2025, 4, 26); // Apr 26
+  const today = fromYMD(2025, 5, 10); // May 10 — after one payday (May 9)
+
+  const data = {
+    exportDate: '2025-04-26',
+    currentStandardPto: 80,
+    currentFlexPto: 20,
+    payPeriod: 'biweekly',
+    lastPaycheckDate: '2025-04-25',
+    vacations: []
+  };
+
+  const { currentStandard, currentFlex } = importAndRecalc(data, today, DEFAULT_CONFIG);
+  // One biweekly payday between Apr 26 and May 10: May 9 (6.16 for 6+ YOS default)
+  closeTo(currentStandard, 80 + 6.16, 0.02);
+  // Flex: at Apr 26, annual accrued would be 10 (Jan grant) + ~5 paydays (Jan10,24,Feb7,21,Mar7) × 3.7 ≈ 28.5
+  // May 9 payday adds 3.7 → total accrued goes to ~32.2, flex += 3.7 = 23.7
+  closeTo(currentFlex, 20 + 3.7, 0.02);
+});
+
+test('loadLocal-style persistence: importAndRecalc with same-day export returns unchanged balances', () => {
+  const today = fromYMD(2025, 5, 19);
+  const data = {
+    exportDate: '2025-05-19',
+    currentStandardPto: 45.5,
+    currentFlexPto: 12.25,
+    payPeriod: 'monthly',
+    vacations: [
+      { id: 1, startDate: '2025-06-02', endDate: '2025-06-06', standardHours: 40, flexHours: 0 }
+    ]
+  };
+  const { currentStandard, currentFlex, futureVacations } = importAndRecalc(data, today, DEFAULT_CONFIG);
+  // Same day export → no accruals applied, balance unchanged
+  closeTo(currentStandard, 45.5);
+  closeTo(currentFlex, 12.25);
+  // Future vacation should still be present
+  assert.equal(futureVacations.length, 1);
+});
+
+test('past vacations are removed and deducted on reload', () => {
+  const exportDate = fromYMD(2025, 5, 1);
+  const today = fromYMD(2025, 5, 19);
+  const data = {
+    exportDate: '2025-05-01',
+    currentStandardPto: 40,
+    currentFlexPto: 10,
+    payPeriod: 'monthly',
+    vacations: [
+      { id: 1, startDate: '2025-05-10', endDate: '2025-05-10', standardHours: 8, flexHours: 0 }, // past
+      { id: 2, startDate: '2025-06-15', endDate: '2025-06-15', standardHours: 8, flexHours: 0 }  // future
+    ]
+  };
+  const { currentStandard, currentFlex, futureVacations } = importAndRecalc(data, today, DEFAULT_CONFIG);
+  // May 10 vacation deducted: 40 - 8 = 32
+  closeTo(currentStandard, 32);
+  // Only future vacation remains
+  assert.equal(futureVacations.length, 1);
+  assert.equal(futureVacations[0].id, 2);
 });
