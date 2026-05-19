@@ -1,23 +1,25 @@
 // Core pure logic extracted for testing
 
 export const DEFAULT_CONFIG = {
-  // Standard PTO
   standard: {
-    // Tenure-based monthly rates (hours per month)
     firstYearRate: 6.67,
     years1to5Rate: 10,
     years6plusRate: 13.34,
-    cap: 160 // rollover and balance cap
+    firstYearBiweeklyRate: 3.08,
+    years1to5BiweeklyRate: 4.62,
+    years6plusBiweeklyRate: 6.16,
+    cap: 160
   },
-  // Flex PTO
   flex: {
-    janMonthly: 10,      // Jan 1 grant
-    otherMonthly: 8,     // Feb-Dec monthly accrual
-    annualAccrualCap: 48, // total credited per year
-    carryoverCap: 48,     // rollover cap at year-end
-    balanceCap: 96        // hard balance maximum
+    janMonthly: 10,
+    otherMonthly: 8,
+    biweeklyRate: 3.7,
+    annualAccrualCap: 48,
+    carryoverCap: 48,
+    balanceCap: 96
   },
-  workdayHours: 8
+  workdayHours: 8,
+  payPeriod: 'monthly' // 'monthly' | 'biweekly'
 };
 
 // --- Date helpers ---
@@ -47,15 +49,37 @@ export function formatDate(date) {
   return `${month}/${day}/${year}`;
 }
 
-// --- Holidays (US common set used in page) ---
+// Format decimal hours as "X hrs Y mins"
+export function formatHoursMinutes(decimalHours) {
+  const negative = decimalHours < 0;
+  const totalMins = Math.round(Math.abs(decimalHours) * 60);
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return `${negative ? '-' : ''}${hrs} hrs ${mins} mins`;
+}
+
+export function decimalToHrsMins(decimalHours) {
+  const negative = decimalHours < 0;
+  const totalMins = Math.round(Math.abs(decimalHours) * 60);
+  return {
+    hrs: negative ? -Math.floor(totalMins / 60) : Math.floor(totalMins / 60),
+    mins: totalMins % 60
+  };
+}
+
+export function hrsMinsToDecimal(hrs, mins) {
+  return (Number(hrs) || 0) + (Number(mins) || 0) / 60;
+}
+
+// --- Holidays (US common set) ---
 export function getHolidaysForYear(year) {
-  const holidays = new Map(); // key: ymd, val: name
+  const holidays = new Map();
 
   const setObservedIfWeekend = (date, name) => {
     const dt = toLocalMidnight(date);
     const day = dt.getDay();
-    if (day === 6) dt.setDate(dt.getDate() + 2); // Saturday -> Monday
-    else if (day === 0) dt.setDate(dt.getDate() + 1); // Sunday -> Monday
+    if (day === 6) dt.setDate(dt.getDate() + 2);
+    else if (day === 0) dt.setDate(dt.getDate() + 1);
     holidays.set(ymd(dt), name);
   };
 
@@ -76,14 +100,14 @@ export function getHolidaysForYear(year) {
   };
 
   setObservedIfWeekend(new Date(year, 0, 1), "New Year's Day");
-  nthDow(year, 0, 1, 3, 'MLK Day'); // 3rd Monday in Jan
-  lastDow(year, 4, 1, 'Memorial Day'); // last Monday in May
+  nthDow(year, 0, 1, 3, 'MLK Day');
+  lastDow(year, 4, 1, 'Memorial Day');
   setObservedIfWeekend(new Date(year, 6, 4), 'Independence Day');
-  nthDow(year, 8, 1, 1, 'Labor Day'); // 1st Monday in Sept
-  nthDow(year, 10, 4, 4, 'Thanksgiving'); // 4th Thursday in Nov
+  nthDow(year, 8, 1, 1, 'Labor Day');
+  nthDow(year, 10, 4, 4, 'Thanksgiving');
   setObservedIfWeekend(new Date(year, 11, 25), 'Christmas Day');
 
-  return holidays; // Map<ymd, name>
+  return holidays;
 }
 
 function getHolidaysForRange(start, end) {
@@ -104,10 +128,7 @@ export function countWorkdaysAndHolidays(start, end, holidayNamesByYmd) {
 
   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
     const dow = d.getDay();
-    if (dow === 0 || dow === 6) {
-      weekendDays++;
-      continue;
-    }
+    if (dow === 0 || dow === 6) { weekendDays++; continue; }
     const key = ymd(d);
     if (holidayNamesByYmd.has(key)) {
       holidaysFound.push(holidayNamesByYmd.get(key));
@@ -139,6 +160,50 @@ export function getInitialFlexAccruedThisYear(today, config = DEFAULT_CONFIG) {
   return accrued;
 }
 
+// Returns all biweekly paydays on or after startDate up to endDate, anchored to lastPaycheckDate
+function getBiweeklyPaydays(lastPaycheckDate, startDate, endDate) {
+  const ref = toLocalMidnight(lastPaycheckDate);
+  const start = toLocalMidnight(startDate);
+  const end = toLocalMidnight(endDate);
+
+  const diffDays = Math.round((start.getTime() - ref.getTime()) / 86400000);
+  let periods = Math.floor(diffDays / 14);
+  let current = new Date(ref);
+  current.setDate(current.getDate() + periods * 14);
+  while (current < start) current.setDate(current.getDate() + 14);
+
+  const paydays = [];
+  while (current <= end) {
+    paydays.push(new Date(current));
+    current.setDate(current.getDate() + 14);
+  }
+  return paydays;
+}
+
+// How much flex was credited this year before asOfDate (biweekly mode)
+export function getInitialFlexAccruedThisYearBiweekly(asOfDate, config, lastPaycheckDate) {
+  const date = toLocalMidnight(asOfDate);
+  const jan1 = new Date(date.getFullYear(), 0, 1);
+  let accrued = 0;
+
+  if (jan1 <= date) {
+    accrued = Math.min(config.flex.janMonthly, config.flex.annualAccrualCap);
+  }
+
+  if (lastPaycheckDate) {
+    const paydays = getBiweeklyPaydays(lastPaycheckDate, jan1, date);
+    for (const pd of paydays) {
+      if (pd <= jan1) continue;
+      if (pd >= date) break;
+      const room = config.flex.annualAccrualCap - accrued;
+      if (room <= 0) break;
+      accrued += Math.min(config.flex.biweeklyRate, room);
+    }
+  }
+
+  return Math.min(accrued, config.flex.annualAccrualCap);
+}
+
 export function completedYearsOfService(hireDate, onDate) {
   if (!hireDate || !(hireDate instanceof Date) || isNaN(hireDate)) return 0;
   const h = toLocalMidnight(hireDate);
@@ -157,9 +222,25 @@ export function standardMonthlyRateForDate(hireDate, accrualDate, config = DEFAU
   return config.standard.years6plusRate;
 }
 
-export function generateAccrualEvents(baseDate, yearsAhead = 2, config = DEFAULT_CONFIG, hireDate = null) {
+export function standardBiweeklyRateForDate(hireDate, accrualDate, config = DEFAULT_CONFIG) {
+  if (!hireDate) return config.standard.years6plusBiweeklyRate;
+  const years = completedYearsOfService(hireDate, accrualDate);
+  if (years < 1) return config.standard.firstYearBiweeklyRate;
+  if (years < 6) return config.standard.years1to5BiweeklyRate;
+  return config.standard.years6plusBiweeklyRate;
+}
+
+export function generateAccrualEvents(baseDate, yearsAhead = 2, config = DEFAULT_CONFIG, hireDate = null, lastPaycheckDate = null) {
   const today = toLocalMidnight(baseDate);
   const endDate = new Date(today.getFullYear() + yearsAhead, 11, 31);
+
+  if (config.payPeriod === 'biweekly') {
+    return _generateBiweeklyAccrualEvents(today, endDate, config, hireDate, lastPaycheckDate);
+  }
+  return _generateMonthlyAccrualEvents(today, endDate, config, hireDate);
+}
+
+function _generateMonthlyAccrualEvents(today, endDate, config, hireDate) {
   const events = [];
   let current = new Date(today.getFullYear(), today.getMonth(), 1);
   if (today.getDate() > 1) current.setMonth(current.getMonth() + 1);
@@ -167,28 +248,47 @@ export function generateAccrualEvents(baseDate, yearsAhead = 2, config = DEFAULT
   while (current <= endDate) {
     const standardAmount = standardMonthlyRateForDate(hireDate, current, config);
     const flexAmount = current.getMonth() === 0 ? config.flex.janMonthly : config.flex.otherMonthly;
-    events.push({
-      date: new Date(current),
-      type: 'accrual',
-      standardAmount,
-      flexAmount
-    });
+    events.push({ date: new Date(current), type: 'accrual', standardAmount, flexAmount });
     current.setMonth(current.getMonth() + 1);
   }
-
   return events;
 }
 
+function _generateBiweeklyAccrualEvents(today, endDate, config, hireDate, lastPaycheckDate) {
+  const events = [];
+
+  // Jan 1 grant for each future year in range
+  for (let y = today.getFullYear(); y <= endDate.getFullYear(); y++) {
+    const jan1 = new Date(y, 0, 1);
+    if (jan1 > today) {
+      events.push({ date: jan1, type: 'accrual', standardAmount: 0, flexAmount: config.flex.janMonthly });
+    }
+  }
+
+  if (lastPaycheckDate) {
+    const paydays = getBiweeklyPaydays(lastPaycheckDate, today, endDate);
+    for (const pd of paydays) {
+      if (pd <= today) continue;
+      const standardAmount = standardBiweeklyRateForDate(hireDate, pd, config);
+      events.push({ date: new Date(pd), type: 'accrual', standardAmount, flexAmount: config.flex.biweeklyRate });
+    }
+  }
+
+  return events.sort((a, b) => a.date - b.date);
+}
+
 // --- Accrual and rollover simulation with caps ---
-export function applyEventsWithCaps(initialStandard, initialFlex, events, startDate, config = DEFAULT_CONFIG) {
+// initialFlexAccruedThisYear: optional override; if null, computed from startDate
+export function applyEventsWithCaps(initialStandard, initialFlex, events, startDate, config = DEFAULT_CONFIG, initialFlexAccruedThisYear = null) {
   let standard = initialStandard;
   let flex = initialFlex;
-  let flexAccruedThisYear = getInitialFlexAccruedThisYear(startDate, config);
+  let flexAccruedThisYear = initialFlexAccruedThisYear !== null
+    ? initialFlexAccruedThisYear
+    : getInitialFlexAccruedThisYear(startDate, config);
   let lastYear = startDate.getFullYear();
 
   for (const event of events.sort((a, b) => a.date - b.date)) {
     if (event.date.getFullYear() > lastYear) {
-      // Year-end rollover
       standard = Math.min(standard, config.standard.cap);
       flex = Math.min(flex, config.flex.carryoverCap);
       flexAccruedThisYear = 0;
@@ -196,11 +296,9 @@ export function applyEventsWithCaps(initialStandard, initialFlex, events, startD
     }
 
     if (event.type === 'accrual') {
-      // Standard accrual and cap
       standard += event.standardAmount ?? config.standard.years6plusRate;
       if (standard > config.standard.cap) standard = config.standard.cap;
 
-      // Flex accrual, respect annual credited cap and balance cap
       const room = Math.max(0, config.flex.annualAccrualCap - flexAccruedThisYear);
       const requested = event.flexAmount ?? (event.date.getMonth() === 0 ? config.flex.janMonthly : config.flex.otherMonthly);
       const actual = Math.min(room, requested);
@@ -218,20 +316,17 @@ export function applyEventsWithCaps(initialStandard, initialFlex, events, startD
   return { standard, flex };
 }
 
-// Expand a vacation into per-workday deduction events (skipping weekends/holidays),
-// distributing the requested hours across days up to workdayHours per day, favoring Standard then Flex.
 export function expandVacationDays(vacation, config = DEFAULT_CONFIG) {
   const start = toLocalMidnight(vacation.startDate);
   const end = toLocalMidnight(vacation.endDate || vacation.startDate);
   const holidays = getHolidaysForRange(start, end);
 
-  // Collect workday dates
   const days = [];
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const dow = d.getDay();
-    if (dow === 0 || dow === 6) continue; // weekend
+    if (dow === 0 || dow === 6) continue;
     const key = ymd(d);
-    if (holidays.has(key)) continue; // holiday
+    if (holidays.has(key)) continue;
     days.push(new Date(d));
   }
 
@@ -253,12 +348,10 @@ export function expandVacationDays(vacation, config = DEFAULT_CONFIG) {
   return perDay;
 }
 
-// Generate a timeline ledger: accruals, year-end rollover entries, and aggregated vacation entries for display.
-export function generateTimelineLedger(today, initialStandard, initialFlex, vacations, yearsAhead = 2, config = DEFAULT_CONFIG, hireDate = null) {
+export function generateTimelineLedger(today, initialStandard, initialFlex, vacations, yearsAhead = 2, config = DEFAULT_CONFIG, hireDate = null, lastPaycheckDate = null) {
   const t0 = toLocalMidnight(today);
-  const accruals = generateAccrualEvents(t0, yearsAhead, config, hireDate);
+  const accruals = generateAccrualEvents(t0, yearsAhead, config, hireDate, lastPaycheckDate);
 
-  // Expand vacations into daily deduction events, but also keep aggregated display items
   const vacationDailyEvents = [];
   const vacationDisplay = [];
   for (const v of vacations) {
@@ -278,13 +371,20 @@ export function generateTimelineLedger(today, initialStandard, initialFlex, vaca
     });
   }
 
-  // Processing order: yearEnd (synthetic), accruals, vacation-day; all after initial
   const allProcessEvents = [...accruals, ...vacationDailyEvents].sort((a, b) => (a.date - b.date) || (a.type === 'accrual' ? -1 : 1));
 
   let standard = Number(initialStandard) || 0;
   let flex = Number(initialFlex) || 0;
-  let flexAccruedThisYear = getInitialFlexAccruedThisYear(t0, config);
+
+  let flexAccruedThisYear;
+  if (config.payPeriod === 'biweekly' && lastPaycheckDate) {
+    flexAccruedThisYear = getInitialFlexAccruedThisYearBiweekly(t0, config, lastPaycheckDate);
+  } else {
+    flexAccruedThisYear = getInitialFlexAccruedThisYear(t0, config);
+  }
   let lastYear = t0.getFullYear();
+
+  const accrualLabel = config.payPeriod === 'biweekly' ? 'Biweekly Accrual' : 'Monthly Accrual';
 
   const events = [{
     type: 'initial',
@@ -296,23 +396,19 @@ export function generateTimelineLedger(today, initialStandard, initialFlex, vaca
     runningFlex: flex
   }];
 
-  // Track shortages per vacation parent
   const shortageByVacationId = new Set();
-
   let pendingYearEnd = null;
+
   for (const ev of allProcessEvents) {
     if (ev.date.getFullYear() > lastYear) {
-      // Compute year-end rollover, but attach info to Jan 1 event instead of separate entry
       const beforeStd = standard; const beforeFlex = flex;
       standard = Math.min(standard, config.standard.cap);
       flex = Math.min(flex, config.flex.carryoverCap);
-      const lostStd = beforeStd - standard;
-      const lostFlex = beforeFlex - flex;
       pendingYearEnd = {
         fromYear: lastYear,
         toYear: ev.date.getFullYear(),
-        lostStandard: lostStd,
-        lostFlex: lostFlex
+        lostStandard: beforeStd - standard,
+        lostFlex: beforeFlex - flex
       };
       flexAccruedThisYear = 0;
       lastYear = ev.date.getFullYear();
@@ -338,13 +434,12 @@ export function generateTimelineLedger(today, initialStandard, initialFlex, vaca
       const entry = {
         type: 'accrual',
         date: ev.date,
-        description: 'Monthly Accrual',
+        description: accrualLabel,
         standardChange: stdDelta,
         flexChange: flexDelta,
         runningStandard: standard,
         runningFlex: flex
       };
-      // Attach year-end info to Jan 1 accrual entry only
       if (pendingYearEnd && ev.date.getMonth() === 0 && ev.date.getDate() === 1) {
         entry.yearEndInfo = pendingYearEnd;
         pendingYearEnd = null;
@@ -367,7 +462,6 @@ export function generateTimelineLedger(today, initialStandard, initialFlex, vaca
     }
   }
 
-  // Fold vacation-day events into single aggregated display entries per vacation
   const displayEvents = [];
   const groupedByVacation = new Map();
   for (const e of events) {
@@ -388,7 +482,6 @@ export function generateTimelineLedger(today, initialStandard, initialFlex, vaca
       lastBalanceStd = day.runningStandard;
       lastBalanceFlex = day.runningFlex;
     }
-    // Insert aggregated entry at the correct date position
     displayEvents.push({
       type: 'vacation',
       id: v.id,
@@ -397,24 +490,22 @@ export function generateTimelineLedger(today, initialStandard, initialFlex, vaca
       endDate: v.endDate,
       name: v.name || '',
       description: v.description,
-      standardChange: stdDelta, // negative
-      flexChange: flexDelta,    // negative
+      standardChange: stdDelta,
+      flexChange: flexDelta,
       runningStandard: lastBalanceStd,
       runningFlex: lastBalanceFlex,
       causesShortage: shortageByVacationId.has(v.id)
     });
   }
 
-  // Sort final display events by date, and within same date order: initial, yearEnd, accrual, vacation
-  const rank = { initial: 0, accrual: 2, 'vacation': 3 };
+  const rank = { initial: 0, accrual: 2, vacation: 3 };
   displayEvents.sort((a, b) => (a.date - b.date) || ((rank[a.type] ?? 99) - (rank[b.type] ?? 99)));
 
   const hasAnyShortage = displayEvents.some(e => e.type === 'vacation' && e.causesShortage);
-
   return { events: displayEvents, hasAnyShortage };
 }
 
-// --- Import/Export helpers using YMD dates to avoid timezone drift ---
+// --- Import/Export helpers ---
 export function serializeDateYMD(d) {
   return ymd(d);
 }
@@ -424,13 +515,14 @@ export function parseYMD(s) {
   return fromYMD(y, m, d);
 }
 
-export function exportState(now, currentStandard, currentFlex, vacations, hireDate = null) {
-  const exportDate = serializeDateYMD(now);
+export function exportState(now, currentStandard, currentFlex, vacations, hireDate = null, payPeriod = 'monthly', lastPaycheckDate = null) {
   return {
-    exportDate,
+    exportDate: serializeDateYMD(now),
     currentStandardPto: currentStandard,
     currentFlexPto: currentFlex,
     hireDate: hireDate ? serializeDateYMD(hireDate) : null,
+    payPeriod,
+    lastPaycheckDate: lastPaycheckDate ? serializeDateYMD(lastPaycheckDate) : null,
     vacations: vacations.map(v => ({
       ...v,
       startDate: serializeDateYMD(v.startDate),
@@ -445,6 +537,9 @@ export function importAndRecalc(data, today, config = DEFAULT_CONFIG) {
   let currentStandard = Number(data.currentStandardPto) || 0;
   let currentFlex = Number(data.currentFlexPto) || 0;
   const hireDate = data.hireDate ? parseYMD(data.hireDate) : null;
+  const payPeriod = data.payPeriod || 'monthly';
+  const lastPaycheckDate = data.lastPaycheckDate ? parseYMD(data.lastPaycheckDate) : null;
+  const mergedConfig = { ...config, payPeriod };
 
   const importedVacations = (data.vacations || []).map(v => ({
     ...v,
@@ -453,26 +548,50 @@ export function importAndRecalc(data, today, config = DEFAULT_CONFIG) {
   }));
 
   const events = [];
-  // Determine first accrual to process: next month from export month, or skip month if exported on the 1st (pre-accrual assumption)
-  let accrualDate = new Date(exportDate.getFullYear(), exportDate.getMonth(), 1);
-  if (exportDate.getDate() >= 1) {
-    accrualDate.setMonth(accrualDate.getMonth() + 1);
+
+  if (payPeriod === 'biweekly' && lastPaycheckDate) {
+    // Jan 1 grants for years that crossed since export
+    for (let y = exportDate.getFullYear(); y <= t.getFullYear(); y++) {
+      const jan1 = new Date(y, 0, 1);
+      if (jan1 > exportDate && jan1 < t) {
+        events.push({ date: jan1, type: 'accrual', standardAmount: 0, flexAmount: config.flex.janMonthly });
+      }
+    }
+    // Biweekly paydays strictly between exportDate and today
+    const paydays = getBiweeklyPaydays(lastPaycheckDate, exportDate, t);
+    for (const pd of paydays) {
+      if (pd <= exportDate || pd >= t) continue;
+      events.push({
+        date: pd,
+        type: 'accrual',
+        standardAmount: standardBiweeklyRateForDate(hireDate, pd, mergedConfig),
+        flexAmount: config.flex.biweeklyRate
+      });
+    }
+  } else {
+    let accrualDate = new Date(exportDate.getFullYear(), exportDate.getMonth(), 1);
+    if (exportDate.getDate() >= 1) accrualDate.setMonth(accrualDate.getMonth() + 1);
+    while (accrualDate < t) {
+      const standardAmount = standardMonthlyRateForDate(hireDate, accrualDate, config);
+      const flexAmount = accrualDate.getMonth() === 0 ? config.flex.janMonthly : config.flex.otherMonthly;
+      events.push({ date: new Date(accrualDate), type: 'accrual', standardAmount, flexAmount });
+      accrualDate.setMonth(accrualDate.getMonth() + 1);
+    }
   }
-  while (accrualDate < t) {
-    const standardAmount = standardMonthlyRateForDate(hireDate, accrualDate, config);
-    const flexAmount = accrualDate.getMonth() === 0 ? config.flex.janMonthly : config.flex.otherMonthly;
-    events.push({ date: new Date(accrualDate), type: 'accrual', standardAmount, flexAmount });
-    accrualDate.setMonth(accrualDate.getMonth() + 1);
-  }
-  // Past vacations between exportDate (inclusive) and today (exclusive)
+
+  // Past vacations: start on or after exportDate and before today
   importedVacations.forEach(v => {
     if (v.startDate >= exportDate && v.startDate < t) {
       events.push({ date: v.startDate, type: 'vacation', standardHours: v.standardHours, flexHours: v.flexHours });
     }
   });
 
-  const { standard, flex } = applyEventsWithCaps(currentStandard, currentFlex, events, exportDate, config);
+  const flexAccruedAtExport = (payPeriod === 'biweekly' && lastPaycheckDate)
+    ? getInitialFlexAccruedThisYearBiweekly(exportDate, mergedConfig, lastPaycheckDate)
+    : getInitialFlexAccruedThisYear(exportDate, config);
+
+  const { standard, flex } = applyEventsWithCaps(currentStandard, currentFlex, events, exportDate, mergedConfig, flexAccruedAtExport);
   const futureVacations = importedVacations.filter(v => v.startDate >= t);
 
-  return { currentStandard: standard, currentFlex: flex, futureVacations };
+  return { currentStandard: standard, currentFlex: flex, futureVacations, payPeriod, lastPaycheckDate };
 }

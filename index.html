@@ -8,9 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker@2.0.12/dist/css/litepicker.css"/>
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
+        body { font-family: 'Inter', sans-serif; }
         .timeline-item::before {
             content: '';
             position: absolute;
@@ -21,9 +19,7 @@
             background-color: #4a5568;
             transform: translateX(-50%);
         }
-        .timeline-item:last-child::before {
-            display: none;
-        }
+        .timeline-item:last-child::before { display: none; }
         .timeline-dot {
             position: absolute;
             left: 1.25rem;
@@ -33,35 +29,17 @@
             border-radius: 9999px;
             transform: translateX(-50%);
         }
-        /* Style litepicker to match the dark theme */
-        .litepicker {
-            background-color: #1f2937;
-            border-color: #4b5563;
-        }
-        .litepicker, .litepicker .container__months .month-item-header, .litepicker .container__months .month-item {
-             color: #d1d5db;
-        }
-        .litepicker .month-item-day.is-start-date, .litepicker .month-item-day.is-end-date {
-            background-color: #4f46e5 !important;
-            color: white !important;
-        }
-        .litepicker .month-item-day.in-range {
-            background-color: #3730a3 !important;
-            color: white !important;
-        }
-        .litepicker .button-previous-month, .litepicker .button-next-month {
-            color: #9ca3af;
-        }
-        .litepicker .button-previous-month:hover, .litepicker .button-next-month:hover {
-            background-color: #374151;
-        }
-        .litepicker .month-item-day:hover {
-            background-color: #4b5563;
-        }
-        .litepicker .month-item-day.is-today {
-            color: #6366f1;
-            font-weight: bold;
-        }
+        .litepicker { background-color: #1f2937; border-color: #4b5563; }
+        .litepicker, .litepicker .container__months .month-item-header, .litepicker .container__months .month-item { color: #d1d5db; }
+        .litepicker .month-item-day.is-start-date, .litepicker .month-item-day.is-end-date { background-color: #4f46e5 !important; color: white !important; }
+        .litepicker .month-item-day.in-range { background-color: #3730a3 !important; color: white !important; }
+        .litepicker .button-previous-month, .litepicker .button-next-month { color: #9ca3af; }
+        .litepicker .button-previous-month:hover, .litepicker .button-next-month:hover { background-color: #374151; }
+        .litepicker .month-item-day:hover { background-color: #4b5563; }
+        .litepicker .month-item-day.is-today { color: #6366f1; font-weight: bold; }
+        .hm-input { display: flex; align-items: center; gap: 0.35rem; }
+        .hm-input input { width: 4.5rem; }
+        .hm-input span { color: #9ca3af; font-size: 0.875rem; white-space: nowrap; }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -76,36 +54,61 @@
             </div>
         </div>
 
-
-        <!-- Top Two-Column Panel: Current Balances (left) and Employment Info (right) -->
+        <!-- Top Two-Column Panel -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+
         <!-- Current Balances -->
         <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
             <h2 class="text-2xl font-semibold mb-4 text-white">Current Balances</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 gap-4">
                 <div>
-                    <label for="currentStandardPto" class="block text-sm font-medium text-gray-300">Standard PTO Balance (hours)</label>
-                    <input type="number" id="currentStandardPto" min="0" step="0.01" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Standard PTO Balance</label>
+                    <div class="hm-input">
+                        <input type="number" id="currentStandardPtoHrs" min="0" step="1" class="bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                        <span>hrs</span>
+                        <input type="number" id="currentStandardPtoMins" min="0" max="59" step="1" class="bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                        <span>mins</span>
+                    </div>
                 </div>
                 <div>
-                    <label for="currentFlexPto" class="block text-sm font-medium text-gray-300">Flex PTO Balance (hours)</label>
-                    <input type="number" id="currentFlexPto" min="0" step="0.01" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Flex PTO Balance</label>
+                    <div class="hm-input">
+                        <input type="number" id="currentFlexPtoHrs" min="0" step="1" class="bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                        <span>hrs</span>
+                        <input type="number" id="currentFlexPtoMins" min="0" max="59" step="1" class="bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                        <span>mins</span>
+                    </div>
                 </div>
             </div>
         </div>
-        
+
         <!-- Employment Info -->
         <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
             <h2 class="text-2xl font-semibold mb-4 text-white">Employment Info</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                    <label for="payPeriod" class="block text-sm font-medium text-gray-300">Pay Period</label>
+                    <select id="payPeriod" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="monthly">Monthly</option>
+                        <option value="biweekly">Biweekly</option>
+                    </select>
+                </div>
+                <div>
                     <label for="hireDate" class="block text-sm font-medium text-gray-300">Hire Date</label>
                     <input type="date" id="hireDate" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div id="lastPaycheckRow" class="hidden md:col-span-2">
+                    <label for="lastPaycheckDate" class="block text-sm font-medium text-gray-300">Last Paycheck Date <span class="text-gray-400 font-normal">(Friday of most recent pay period)</span></label>
+                    <input type="date" id="lastPaycheckDate" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                 </div>
             </div>
             <div id="hireDateWarningBlock" class="hidden mt-4 bg-yellow-900 border-l-4 border-yellow-500 text-yellow-100 p-4 rounded-lg shadow-lg" role="alert" aria-live="polite">
                 <p class="font-bold">Missing Hire Date</p>
                 <p>Enter your hire date to compute accurate accrual rates for the timeline.</p>
+            </div>
+            <div id="biweeklyWarningBlock" class="hidden mt-4 bg-yellow-900 border-l-4 border-yellow-500 text-yellow-100 p-4 rounded-lg shadow-lg" role="alert" aria-live="polite">
+                <p class="font-bold">Last Paycheck Date Required</p>
+                <p>Enter the date of your most recent paycheck to anchor the biweekly accrual schedule.</p>
             </div>
         </div>
         </div>
@@ -114,28 +117,38 @@
         <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
             <h2 id="vacationFormTitle" class="text-2xl font-semibold mb-4 text-white">Add Future Vacation</h2>
             <div class="mb-4">
-                 <label for="dateRangePicker" class="block text-sm font-medium text-gray-300">Select Vacation Date Range</label>
-                 <input id="dateRangePicker" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Click to select a date range..."/>
+                <label for="dateRangePicker" class="block text-sm font-medium text-gray-300">Select Vacation Date Range</label>
+                <input id="dateRangePicker" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Click to select a date range..."/>
             </div>
-             <div id="ptoSuggestion" class="text-center text-indigo-300 font-semibold my-4 hidden flex-col justify-center"></div>
-             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div id="ptoSuggestion" class="text-center text-indigo-300 font-semibold my-4 hidden flex-col justify-center"></div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
                 <input type="hidden" id="editingVacationId">
                 <div class="lg:col-span-2">
                     <label for="vacationName" class="block text-sm font-medium text-gray-300">Vacation Name (optional)</label>
                     <input type="text" id="vacationName" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., Beach Trip">
                 </div>
                 <div class="lg:col-span-1">
-                    <label for="standardPtoHours" class="block text-sm font-medium text-gray-300">Standard PTO Hours</label>
-                    <input type="number" id="standardPtoHours" min="0" step="0.01" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="8">
+                    <label class="block text-sm font-medium text-gray-300">Standard PTO Hours</label>
+                    <div class="hm-input mt-1">
+                        <input type="number" id="standardPtoHrs" min="0" step="1" class="bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="8">
+                        <span>hrs</span>
+                        <input type="number" id="standardPtoMins" min="0" max="59" step="1" class="bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                        <span>mins</span>
+                    </div>
                 </div>
                 <div class="lg:col-span-1">
-                    <label for="flexPtoHours" class="block text-sm font-medium text-gray-300">Flex PTO Hours</label>
-                    <input type="number" id="flexPtoHours" min="0" step="0.01" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                    <label class="block text-sm font-medium text-gray-300">Flex PTO Hours</label>
+                    <div class="hm-input mt-1">
+                        <input type="number" id="flexPtoHrs" min="0" step="1" class="bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                        <span>hrs</span>
+                        <input type="number" id="flexPtoMins" min="0" max="59" step="1" class="bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" value="0">
+                        <span>mins</span>
+                    </div>
                 </div>
                 <div class="lg:col-span-1">
                     <button id="addVacationBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500">Add Vacation</button>
                 </div>
-                 <div class="lg:col-span-1">
+                <div class="lg:col-span-1">
                     <button id="cancelEditBtn" class="hidden w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Cancel Edit</button>
                 </div>
             </div>
@@ -165,6 +178,9 @@
         import {
             DEFAULT_CONFIG,
             formatDate,
+            formatHoursMinutes,
+            decimalToHrsMins,
+            hrsMinsToDecimal,
             suggestPtoHours,
             generateTimelineLedger,
             toLocalMidnight,
@@ -175,40 +191,87 @@
         } from './src/pto-core.js';
 
         document.addEventListener('DOMContentLoaded', () => {
-            // DOM Elements
-            const currentStandardPtoInput = document.getElementById('currentStandardPto');
-            const currentFlexPtoInput = document.getElementById('currentFlexPto');
-            const standardPtoHoursInput = document.getElementById('standardPtoHours');
-            const flexPtoHoursInput = document.getElementById('flexPtoHours');
-            const addVacationBtn = document.getElementById('addVacationBtn');
-            const vacationsList = document.getElementById('vacationsList');
-            const timeline = document.getElementById('timeline');
+            // Balance inputs
+            const stdBalHrsInput   = document.getElementById('currentStandardPtoHrs');
+            const stdBalMinsInput  = document.getElementById('currentStandardPtoMins');
+            const flexBalHrsInput  = document.getElementById('currentFlexPtoHrs');
+            const flexBalMinsInput = document.getElementById('currentFlexPtoMins');
+            // Vacation form inputs
+            const stdVacHrsInput   = document.getElementById('standardPtoHrs');
+            const stdVacMinsInput  = document.getElementById('standardPtoMins');
+            const flexVacHrsInput  = document.getElementById('flexPtoHrs');
+            const flexVacMinsInput = document.getElementById('flexPtoMins');
+            // Other elements
+            const addVacationBtn        = document.getElementById('addVacationBtn');
+            const vacationsList         = document.getElementById('vacationsList');
+            const timeline              = document.getElementById('timeline');
             const editingVacationIdInput = document.getElementById('editingVacationId');
-            const vacationFormTitle = document.getElementById('vacationFormTitle');
-            const cancelEditBtn = document.getElementById('cancelEditBtn');
-            const globalWarningBlock = document.getElementById('globalWarningBlock');
-            const ptoSuggestion = document.getElementById('ptoSuggestion');
-            const exportBtn = document.getElementById('exportBtn');
-            const importBtn = document.getElementById('importBtn');
-            const importFile = document.getElementById('importFile');
-            const hireDateInput = document.getElementById('hireDate');
-            const hireDateWarningBlock = document.getElementById('hireDateWarningBlock');
-            const vacationNameInput = document.getElementById('vacationName');
+            const vacationFormTitle     = document.getElementById('vacationFormTitle');
+            const cancelEditBtn         = document.getElementById('cancelEditBtn');
+            const globalWarningBlock    = document.getElementById('globalWarningBlock');
+            const ptoSuggestion         = document.getElementById('ptoSuggestion');
+            const exportBtn             = document.getElementById('exportBtn');
+            const importBtn             = document.getElementById('importBtn');
+            const importFile            = document.getElementById('importFile');
+            const hireDateInput         = document.getElementById('hireDate');
+            const hireDateWarningBlock  = document.getElementById('hireDateWarningBlock');
+            const biweeklyWarningBlock  = document.getElementById('biweeklyWarningBlock');
+            const vacationNameInput     = document.getElementById('vacationName');
+            const payPeriodSelect       = document.getElementById('payPeriod');
+            const lastPaycheckDateInput = document.getElementById('lastPaycheckDate');
+            const lastPaycheckRow       = document.getElementById('lastPaycheckRow');
 
             let vacations = [];
 
+            // --- Helpers ---
             function escapeHtml(str) {
                 return String(str).replace(/[&<>"']/g, (ch) => ({
                     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
                 })[ch]);
             }
 
+            function getCurrentStandardDecimal() {
+                return Math.max(0, hrsMinsToDecimal(parseInt(stdBalHrsInput.value) || 0, parseInt(stdBalMinsInput.value) || 0));
+            }
+
+            function getCurrentFlexDecimal() {
+                return Math.max(0, hrsMinsToDecimal(parseInt(flexBalHrsInput.value) || 0, parseInt(flexBalMinsInput.value) || 0));
+            }
+
+            function setStdBalFromDecimal(dec) {
+                const hm = decimalToHrsMins(Math.max(0, dec));
+                stdBalHrsInput.value = hm.hrs;
+                stdBalMinsInput.value = hm.mins;
+            }
+
+            function setFlexBalFromDecimal(dec) {
+                const hm = decimalToHrsMins(Math.max(0, dec));
+                flexBalHrsInput.value = hm.hrs;
+                flexBalMinsInput.value = hm.mins;
+            }
+
+            function buildConfig() {
+                const payPeriod = payPeriodSelect.value;
+                return { ...DEFAULT_CONFIG, payPeriod };
+            }
+
+            function getLastPaycheckDate() {
+                const val = lastPaycheckDateInput.value;
+                if (!val) return null;
+                const d = new Date(val);
+                return isNaN(d) ? null : toLocalMidnight(d);
+            }
+
+            // --- Persistence ---
             function saveLocal() {
                 try {
                     const data = {
-                        currentStandardPto: parseFloat(currentStandardPtoInput.value) || 0,
-                        currentFlexPto: parseFloat(currentFlexPtoInput.value) || 0,
+                        exportDate: serializeDateYMD(new Date()),
+                        currentStandardPto: getCurrentStandardDecimal(),
+                        currentFlexPto: getCurrentFlexDecimal(),
                         hireDate: hireDateInput.value || '',
+                        payPeriod: payPeriodSelect.value,
+                        lastPaycheckDate: lastPaycheckDateInput.value || '',
                         vacations: vacations.map(v => ({
                             id: v.id,
                             startDate: serializeDateYMD(v.startDate),
@@ -229,23 +292,58 @@
                     const raw = localStorage.getItem('ptocalc:state');
                     if (!raw) return;
                     const data = JSON.parse(raw);
-                    currentStandardPtoInput.value = (Number(data.currentStandardPto) || 0).toString();
-                    currentFlexPtoInput.value = (Number(data.currentFlexPto) || 0).toString();
+
+                    // Restore pay period settings first (needed for recalc)
+                    if (data.payPeriod) payPeriodSelect.value = data.payPeriod;
+                    if (data.lastPaycheckDate) lastPaycheckDateInput.value = data.lastPaycheckDate;
                     if (data.hireDate) hireDateInput.value = data.hireDate;
-                    vacations = (data.vacations || []).map(v => ({
-                        id: v.id,
-                        startDate: parseYMD(v.startDate),
-                        endDate: parseYMD(v.endDate),
-                        standardHours: Number(v.standardHours) || 0,
-                        flexHours: Number(v.flexHours) || 0,
-                        name: v.name || ''
-                    }));
+                    updatePayPeriodUI();
+
+                    if (data.exportDate) {
+                        // Advance balances and purge past vacations using importAndRecalc
+                        const today = toLocalMidnight(new Date());
+                        const config = buildConfig();
+                        const result = importAndRecalc(data, today, config);
+                        setStdBalFromDecimal(result.currentStandard);
+                        setFlexBalFromDecimal(result.currentFlex);
+                        vacations = result.futureVacations;
+                    } else {
+                        // Legacy state without exportDate: load as-is
+                        setStdBalFromDecimal(Number(data.currentStandardPto) || 0);
+                        setFlexBalFromDecimal(Number(data.currentFlexPto) || 0);
+                        vacations = (data.vacations || []).map(v => ({
+                            id: v.id,
+                            startDate: parseYMD(v.startDate),
+                            endDate: parseYMD(v.endDate),
+                            standardHours: Number(v.standardHours) || 0,
+                            flexHours: Number(v.flexHours) || 0,
+                            name: v.name || ''
+                        }));
+                    }
+
                     updateHireDateWarning();
+                    updateBiweeklyWarning();
                 } catch (e) {
                     console.warn('Failed to load local state', e);
                 }
             }
-            // --- PTO Hour Calculation (uses core) ---
+
+            // --- Pay period UI ---
+            function updatePayPeriodUI() {
+                const isBiweekly = payPeriodSelect.value === 'biweekly';
+                lastPaycheckRow.classList.toggle('hidden', !isBiweekly);
+            }
+
+            function updateBiweeklyWarning() {
+                if (payPeriodSelect.value !== 'biweekly') {
+                    biweeklyWarningBlock.classList.add('hidden');
+                    return;
+                }
+                const val = lastPaycheckDateInput.value;
+                biweeklyWarningBlock.classList.toggle('hidden', !!val);
+            }
+
+            // --- PTO Hour Calculation ---
             function calculatePtoHours(startDate, endDate) {
                 ptoSuggestion.innerHTML = '';
                 if (!startDate || !endDate) {
@@ -253,14 +351,18 @@
                     return;
                 }
 
-                const { hours, workdays, weekendDays, holidaysFound } = suggestPtoHours(startDate, endDate, DEFAULT_CONFIG);
-                standardPtoHoursInput.value = hours;
-                flexPtoHoursInput.value = 0;
+                const config = buildConfig();
+                const { hours, workdays, weekendDays, holidaysFound } = suggestPtoHours(startDate, endDate, config);
+                const hm = decimalToHrsMins(hours);
+                stdVacHrsInput.value = hm.hrs;
+                stdVacMinsInput.value = hm.mins;
+                flexVacHrsInput.value = 0;
+                flexVacMinsInput.value = 0;
 
-                let suggestionHtml = `<span>Suggested: <strong>${hours} hours</strong> (${workdays} workdays)</span>`;
-                if(weekendDays > 0 || holidaysFound.length > 0) {
+                let suggestionHtml = `<span>Suggested: <strong>${formatHoursMinutes(hours)}</strong> (${workdays} workdays)</span>`;
+                if (weekendDays > 0 || holidaysFound.length > 0) {
                     suggestionHtml += `<span class="text-xs block text-gray-400 mt-1">Excludes ${weekendDays} weekend day(s)`;
-                    if(holidaysFound.length > 0) {
+                    if (holidaysFound.length > 0) {
                         suggestionHtml += ` and ${holidaysFound.length} holiday(s): ${holidaysFound.join(', ')}`;
                     }
                     suggestionHtml += `</span>`;
@@ -269,7 +371,7 @@
                 ptoSuggestion.classList.remove('hidden');
             }
 
-            // --- Litepicker Initialization ---
+            // --- Litepicker ---
             const picker = new Litepicker({
                 element: document.getElementById('dateRangePicker'),
                 singleMode: false,
@@ -280,22 +382,23 @@
             });
 
             picker.on('selected', (start, end) => {
-                if (start && end) {
-                    calculatePtoHours(start.dateInstance, end.dateInstance);
-                }
+                if (start && end) calculatePtoHours(start.dateInstance, end.dateInstance);
             });
 
             picker.on('clear:selection', () => {
-                 ptoSuggestion.classList.add('hidden');
-                 ptoSuggestion.innerHTML = '';
+                ptoSuggestion.classList.add('hidden');
+                ptoSuggestion.innerHTML = '';
             });
 
-            // --- EVENT LISTENERS ---
-            [currentStandardPtoInput, currentFlexPtoInput].forEach(input => {
+            // --- Event Listeners ---
+            [stdBalHrsInput, stdBalMinsInput, flexBalHrsInput, flexBalMinsInput].forEach(input => {
                 input.addEventListener('change', () => {
-                    // clamp to non-negative
-                    const val = parseFloat(input.value) || 0;
-                    input.value = Math.max(0, val).toString();
+                    // Clamp mins to 0-59
+                    if (input === stdBalMinsInput || input === flexBalMinsInput) {
+                        input.value = Math.min(59, Math.max(0, parseInt(input.value) || 0));
+                    } else {
+                        input.value = Math.max(0, parseInt(input.value) || 0);
+                    }
                     saveLocal();
                     updateTimeline();
                 });
@@ -326,11 +429,24 @@
                 updateTimeline();
             });
 
+            payPeriodSelect.addEventListener('change', () => {
+                updatePayPeriodUI();
+                updateBiweeklyWarning();
+                saveLocal();
+                updateTimeline();
+            });
+
+            lastPaycheckDateInput.addEventListener('change', () => {
+                updateBiweeklyWarning();
+                saveLocal();
+                updateTimeline();
+            });
+
             addVacationBtn.addEventListener('click', () => {
                 const startDate = picker.getStartDate()?.dateInstance ? toLocalMidnight(picker.getStartDate().dateInstance) : null;
                 const endDate = picker.getEndDate()?.dateInstance ? toLocalMidnight(picker.getEndDate().dateInstance) : null;
-                const standardHours = parseFloat(standardPtoHoursInput.value) || 0;
-                const flexHours = parseFloat(flexPtoHoursInput.value) || 0;
+                const standardHours = hrsMinsToDecimal(parseInt(stdVacHrsInput.value) || 0, parseInt(stdVacMinsInput.value) || 0);
+                const flexHours = hrsMinsToDecimal(parseInt(flexVacHrsInput.value) || 0, parseInt(flexVacMinsInput.value) || 0);
                 const editingId = parseInt(editingVacationIdInput.value);
                 const name = (vacationNameInput.value || '').trim();
 
@@ -340,7 +456,7 @@
                 }
 
                 const vacationData = {
-                    startDate: startDate,
+                    startDate,
                     endDate: endDate || startDate,
                     standardHours,
                     flexHours,
@@ -349,9 +465,7 @@
 
                 if (editingId) {
                     const index = vacations.findIndex(v => v.id === editingId);
-                    if (index > -1) {
-                        vacations[index] = { ...vacations[index], ...vacationData };
-                    }
+                    if (index > -1) vacations[index] = { ...vacations[index], ...vacationData };
                 } else {
                     vacations.push({ id: Date.now(), ...vacationData });
                 }
@@ -369,8 +483,10 @@
                 addVacationBtn.textContent = 'Add Vacation';
                 editingVacationIdInput.value = '';
                 picker.clearSelection();
-                standardPtoHoursInput.value = '0';
-                flexPtoHoursInput.value = '0';
+                stdVacHrsInput.value = '0';
+                stdVacMinsInput.value = '0';
+                flexVacHrsInput.value = '0';
+                flexVacMinsInput.value = '0';
                 vacationNameInput.value = '';
                 ptoSuggestion.innerHTML = '';
                 ptoSuggestion.classList.add('hidden');
@@ -384,8 +500,12 @@
                     addVacationBtn.textContent = 'Update Vacation';
                     editingVacationIdInput.value = vacation.id;
                     picker.setDateRange(vacation.startDate, vacation.endDate);
-                    standardPtoHoursInput.value = vacation.standardHours;
-                    flexPtoHoursInput.value = vacation.flexHours;
+                    const stdHm = decimalToHrsMins(vacation.standardHours);
+                    stdVacHrsInput.value = stdHm.hrs;
+                    stdVacMinsInput.value = stdHm.mins;
+                    const flexHm = decimalToHrsMins(vacation.flexHours);
+                    flexVacHrsInput.value = flexHm.hrs;
+                    flexVacMinsInput.value = flexHm.mins;
                     vacationNameInput.value = vacation.name || '';
                     cancelEditBtn.classList.remove('hidden');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -409,7 +529,7 @@
                     li.innerHTML = `
                         <div>
                             <p class="font-semibold">${dateStr}${vacation.name ? ` - ${escapeHtml(vacation.name)}` : ''}</p>
-                            <p class="text-sm text-gray-400">Standard: ${vacation.standardHours}h, Flex: ${vacation.flexHours}h</p>
+                            <p class="text-sm text-gray-400">Standard: ${formatHoursMinutes(vacation.standardHours)}, Flex: ${formatHoursMinutes(vacation.flexHours)}</p>
                         </div>
                         <div class="flex space-x-2">
                             <button data-id="${vacation.id}" class="edit-vacation-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-md">Edit</button>
@@ -438,12 +558,14 @@
 
             function updateTimeline() {
                 timeline.innerHTML = '';
-                const initialStandardPto = parseFloat(currentStandardPtoInput.value) || 0;
-                const initialFlexPto = parseFloat(currentFlexPtoInput.value) || 0;
+                const initialStandardPto = getCurrentStandardDecimal();
+                const initialFlexPto = getCurrentFlexDecimal();
                 const today = toLocalMidnight(new Date());
                 const hireDate = hireDateInput.value ? toLocalMidnight(new Date(hireDateInput.value)) : null;
+                const lastPaycheckDate = getLastPaycheckDate();
+                const config = buildConfig();
 
-                const ledger = generateTimelineLedger(today, initialStandardPto, initialFlexPto, vacations, 2, DEFAULT_CONFIG, hireDate);
+                const ledger = generateTimelineLedger(today, initialStandardPto, initialFlexPto, vacations, 2, config, hireDate, lastPaycheckDate);
 
                 globalWarningBlock.classList.toggle('hidden', !ledger.hasAnyShortage);
 
@@ -461,13 +583,13 @@
                         const standardSign = (event.standardChange || 0) >= 0 ? '+' : '';
                         const flexSign = (event.flexChange || 0) >= 0 ? '+' : '';
                         const color = event.type === 'accrual' ? 'text-green-400' : 'text-red-400';
-                        changeHtml = `<div class="text-sm ${color}">\n                                <span>Std: ${standardSign}${(event.standardChange || 0).toFixed(2)}h</span> | <span>Flex: ${flexSign}${(event.flexChange || 0).toFixed(2)}h</span>\n                            </div>`;
+                        changeHtml = `<div class="text-sm ${color}">
+                                <span>Std: ${standardSign}${formatHoursMinutes(event.standardChange || 0)}</span> | <span>Flex: ${flexSign}${formatHoursMinutes(event.flexChange || 0)}</span>
+                            </div>`;
                     }
 
-                    // Additional warnings/info
                     let capInfoHtml = '';
                     let yearEndHtml = '';
-                    // Cap reached notices on accrual events
                     if (event.type === 'accrual') {
                         const stdBefore = (event.runningStandard || 0) - (event.standardChange || 0);
                         const flexBefore = (event.runningFlex || 0) - (event.flexChange || 0);
@@ -478,16 +600,15 @@
                             capInfoHtml += '<p class="text-red-500 font-bold text-sm">Flex PTO reached 96h balance cap.</p>';
                         }
                     }
-                    // Year-end rollover info merged into Jan 1 accrual
                     if (event.yearEndInfo) {
                         const lostStd = event.yearEndInfo.lostStandard || 0;
                         const lostFlex = event.yearEndInfo.lostFlex || 0;
                         const anyLoss = (lostStd > 0.01) || (lostFlex > 0.01);
                         yearEndHtml = `<div class="p-3 mb-3 bg-gray-700 rounded-lg shadow-inner">
                             <h5 class="font-bold text-lg text-white">${event.yearEndInfo.fromYear} -> ${event.yearEndInfo.toYear} rollover</h5>
-                            ${lostStd > 0.01 ? `<p class=\"text-sm font-semibold text-red-500\">Standard PTO forfeited: ${lostStd.toFixed(2)}h</p>` : ''}
-                            ${lostFlex > 0.01 ? `<p class=\"text-sm font-semibold text-red-500\">Flex PTO forfeited (over 48h): ${lostFlex.toFixed(2)}h</p>` : ''}
-                            ${!anyLoss ? `<p class=\"text-sm text-gray-300\">No PTO forfeited at rollover.</p>` : ''}
+                            ${lostStd > 0.01 ? `<p class="text-sm font-semibold text-red-500">Standard PTO forfeited: ${formatHoursMinutes(lostStd)}</p>` : ''}
+                            ${lostFlex > 0.01 ? `<p class="text-sm font-semibold text-red-500">Flex PTO forfeited (over 48h): ${formatHoursMinutes(lostFlex)}</p>` : ''}
+                            ${!anyLoss ? `<p class="text-sm text-gray-300">No PTO forfeited at rollover.</p>` : ''}
                         </div>`;
                     }
 
@@ -498,6 +619,11 @@
                         : event.description;
 
                     const dotColor = event.type === 'vacation' ? 'bg-red-500' : (event.type === 'initial' ? 'bg-blue-500' : 'bg-green-500');
+                    const stdColor = (event.runningStandard !== null && event.runningStandard < 0) ? 'text-red-500' : 'text-indigo-300';
+                    const flexColor = (event.runningFlex !== null && event.runningFlex < 0) ? 'text-red-500' : 'text-cyan-300';
+
+                    const stdDisplay = event.runningStandard !== null ? formatHoursMinutes(event.runningStandard) : '—';
+                    const flexDisplay = event.runningFlex !== null ? formatHoursMinutes(event.runningFlex) : '—';
 
                     item.innerHTML = `
                         ${yearEndHtml}
@@ -508,8 +634,8 @@
                             ${changeHtml}
                             ${capInfoHtml}
                             <div class="mt-2 text-md">
-                                <span class="font-bold ${event.runningStandard < 0 ? 'text-red-500' : 'text-indigo-300'}">Standard: ${event.runningStandard.toFixed(2)}h</span> |
-                                <span class="font-bold ${event.runningFlex < 0 ? 'text-red-500' : 'text-cyan-300'}">Flex: ${event.runningFlex.toFixed(2)}h</span>
+                                <span class="font-bold ${stdColor}">Standard: ${stdDisplay}</span> |
+                                <span class="font-bold ${flexColor}">Flex: ${flexDisplay}</span>
                             </div>
                             <div class="mt-1">${warning}</div>
                         </div>
@@ -518,12 +644,21 @@
                 });
             }
 
-            // --- Import/Export Logic ---
+            // --- Import/Export ---
             exportBtn.addEventListener('click', () => {
                 const hireDate = hireDateInput.value ? toLocalMidnight(new Date(hireDateInput.value)) : null;
-                const dataToExport = exportState(new Date(), parseFloat(currentStandardPtoInput.value), parseFloat(currentFlexPtoInput.value), vacations, hireDate);
+                const lastPaycheckDate = getLastPaycheckDate();
+                const dataToExport = exportState(
+                    new Date(),
+                    getCurrentStandardDecimal(),
+                    getCurrentFlexDecimal(),
+                    vacations,
+                    hireDate,
+                    payPeriodSelect.value,
+                    lastPaycheckDate
+                );
                 const dataStr = JSON.stringify(dataToExport, null, 2);
-                const blob = new Blob([dataStr], {type: "application/json"});
+                const blob = new Blob([dataStr], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -545,27 +680,30 @@
                     try {
                         const data = JSON.parse(e.target.result);
                         const today = toLocalMidnight(new Date());
-                        const result = importAndRecalc(data, today, DEFAULT_CONFIG);
+                        const config = buildConfig();
+                        const result = importAndRecalc(data, today, config);
 
-                        currentStandardPtoInput.value = result.currentStandard.toFixed(2);
-                        currentFlexPtoInput.value = result.currentFlex.toFixed(2);
+                        setStdBalFromDecimal(result.currentStandard);
+                        setFlexBalFromDecimal(result.currentFlex);
                         if (data.hireDate) hireDateInput.value = data.hireDate;
+                        if (data.payPeriod) payPeriodSelect.value = data.payPeriod;
+                        if (data.lastPaycheckDate) lastPaycheckDateInput.value = data.lastPaycheckDate;
+                        updatePayPeriodUI();
+                        updateBiweeklyWarning();
 
                         vacations = result.futureVacations;
                         saveLocal();
-
+                        updateHireDateWarning();
                         updateVacationsList();
                         updateTimeline();
-
                     } catch (error) {
-                        console.error("Failed to import file:", error);
-                        alert("Error: Could not import the file. It may be corrupted or in the wrong format.");
+                        console.error('Failed to import file:', error);
+                        alert('Error: Could not import the file. It may be corrupted or in the wrong format.');
                     }
                 };
                 reader.readAsText(file);
-                importFile.value = ''; // Reset file input
+                importFile.value = '';
             });
-
 
             // Initial load
             loadLocal();
