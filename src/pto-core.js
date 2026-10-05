@@ -502,7 +502,31 @@ export function generateTimelineLedger(today, initialStandard, initialFlex, vaca
   displayEvents.sort((a, b) => (a.date - b.date) || ((rank[a.type] ?? 99) - (rank[b.type] ?? 99)));
 
   const hasAnyShortage = displayEvents.some(e => e.type === 'vacation' && e.causesShortage);
-  return { events: displayEvents, hasAnyShortage };
+  const available = computeAvailableToSpend(events);
+  return { events: displayEvents, hasAnyShortage, available };
+}
+
+// How much combined (standard + flex) PTO can still be spent without any future
+// point in the timeline going negative: the lowest combined balance after today.
+// This can exceed today's balance, since it counts upcoming accruals.
+export function computeAvailableToSpend(ledgerEvents) {
+  const initial = ledgerEvents.find(e => e.type === 'initial');
+  const currentTotal = initial ? initial.runningStandard + initial.runningFlex : 0;
+  const future = ledgerEvents.filter(e => e.type !== 'initial');
+  const points = future.length ? future : (initial ? [initial] : []);
+
+  let lowest = null;
+  for (const e of points) {
+    const total = e.runningStandard + e.runningFlex;
+    if (lowest === null || total < lowest.total - 1e-9) lowest = { total, date: e.date };
+  }
+  const hours = lowest ? Math.max(0, lowest.total) : 0;
+  return {
+    hours,
+    lowPointDate: lowest ? lowest.date : null,
+    currentTotal,
+    exceedsCurrent: hours > currentTotal + 1e-9
+  };
 }
 
 // --- Import/Export helpers ---

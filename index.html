@@ -54,6 +54,17 @@
             </div>
         </div>
 
+        <!-- Available to Spend -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold mb-2 text-white">Available to Spend</h2>
+            <p id="availableHours" class="text-3xl font-bold text-green-400">—</p>
+            <p id="availableDetail" class="text-sm text-gray-400 mt-1"></p>
+            <div id="availableExceedsNotice" class="hidden mt-4 bg-yellow-900 border-l-4 border-yellow-500 text-yellow-100 p-4 rounded-lg" role="status" aria-live="polite">
+                <p class="font-bold">More than your current balance</p>
+                <p id="availableExceedsText"></p>
+            </div>
+        </div>
+
         <!-- Top Two-Column Panel -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
 
@@ -220,6 +231,10 @@
             const payPeriodSelect       = document.getElementById('payPeriod');
             const lastPaycheckDateInput = document.getElementById('lastPaycheckDate');
             const lastPaycheckRow       = document.getElementById('lastPaycheckRow');
+            const availableHours        = document.getElementById('availableHours');
+            const availableDetail       = document.getElementById('availableDetail');
+            const availableExceedsNotice = document.getElementById('availableExceedsNotice');
+            const availableExceedsText  = document.getElementById('availableExceedsText');
 
             let vacations = [];
 
@@ -556,6 +571,20 @@
                 });
             }
 
+            function updateAvailable(available) {
+                availableHours.textContent = formatHoursMinutes(available.hours);
+                availableHours.classList.toggle('text-green-400', available.hours > 0);
+                availableHours.classList.toggle('text-red-400', available.hours <= 0);
+                availableDetail.textContent = available.lowPointDate
+                    ? `Combined Standard + Flex you can still schedule while keeping every planned vacation in the green. Lowest projected balance: ${formatDate(available.lowPointDate)}.`
+                    : '';
+                availableExceedsNotice.classList.toggle('hidden', !available.exceedsCurrent);
+                if (available.exceedsCurrent) {
+                    const extra = available.hours - available.currentTotal;
+                    availableExceedsText.textContent = `Your current balance is ${formatHoursMinutes(available.currentTotal)}. The extra ${formatHoursMinutes(extra)} comes from future accruals, so schedule that time after it has accrued.`;
+                }
+            }
+
             function updateTimeline() {
                 timeline.innerHTML = '';
                 const initialStandardPto = getCurrentStandardDecimal();
@@ -568,6 +597,7 @@
                 const ledger = generateTimelineLedger(today, initialStandardPto, initialFlexPto, vacations, 2, config, hireDate, lastPaycheckDate);
 
                 globalWarningBlock.classList.toggle('hidden', !ledger.hasAnyShortage);
+                updateAvailable(ledger.available);
 
                 ledger.events.forEach(event => {
                     const item = document.createElement('div');

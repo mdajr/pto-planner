@@ -257,6 +257,32 @@ test('on same day, accrual is ordered before vacation entry in ledger', () => {
   assert.ok(idxAccrual < idxVacation);
 });
 
+test('available to spend is the lowest combined future balance, low point dated', () => {
+  const today = fromYMD(2025, 3, 15);
+  const vacations = [{ id: 1, startDate: fromYMD(2025, 4, 7), endDate: fromYMD(2025, 4, 11), standardHours: 40, flexHours: 0 }];
+  const ledger = generateTimelineLedger(today, 40, 0, vacations, 0, DEFAULT_CONFIG);
+  // Apr 1: 40 + 13.34 std, +8 flex = 61.34; vacation week takes 40 -> 21.34 on Apr 11
+  closeTo(ledger.available.hours, 21.34);
+  assert.equal(ledger.available.lowPointDate.getTime(), fromYMD(2025, 4, 11).getTime());
+  assert.equal(ledger.available.exceedsCurrent, false);
+});
+
+test('available to spend can exceed current balance via upcoming accruals', () => {
+  const today = fromYMD(2025, 3, 15);
+  const ledger = generateTimelineLedger(today, 20, 10, [], 0, DEFAULT_CONFIG);
+  // Lowest future point is the Apr 1 accrual: 30 + 13.34 + 8
+  closeTo(ledger.available.hours, 51.34);
+  closeTo(ledger.available.currentTotal, 30);
+  assert.equal(ledger.available.exceedsCurrent, true);
+});
+
+test('available to spend is zero when plans already cause a shortage', () => {
+  const today = fromYMD(2025, 1, 15);
+  const vacations = [{ id: 1, startDate: fromYMD(2025, 2, 3), endDate: fromYMD(2025, 2, 5), standardHours: 40, flexHours: 0 }];
+  const ledger = generateTimelineLedger(today, 0, 0, vacations, 0, DEFAULT_CONFIG);
+  assert.equal(ledger.available.hours, 0);
+});
+
 // --- New: formatHoursMinutes and hrsMins helpers ---
 
 test('formatHoursMinutes converts whole hours', () => {
