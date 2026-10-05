@@ -55,7 +55,7 @@
         </div>
 
         <!-- Available to Spend -->
-        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+        <div id="availableCard" class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
             <h2 class="text-2xl font-semibold mb-2 text-white">Available to Spend</h2>
             <p id="availableHours" class="text-3xl font-bold text-green-400">—</p>
             <p id="availableDetail" class="text-sm text-gray-400 mt-1"></p>
@@ -186,6 +186,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/litepicker@2.0.12/dist/litepicker.js"></script>
     <script type="module">
+        // Bump ?v= whenever src/pto-core.js changes so browsers don't pair a new
+        // index.html with a stale cached core module.
         import {
             DEFAULT_CONFIG,
             formatDate,
@@ -199,7 +201,7 @@
             importAndRecalc,
             serializeDateYMD,
             parseYMD
-        } from './src/pto-core.js';
+        } from './src/pto-core.js?v=2';
 
         document.addEventListener('DOMContentLoaded', () => {
             // Balance inputs
@@ -231,6 +233,7 @@
             const payPeriodSelect       = document.getElementById('payPeriod');
             const lastPaycheckDateInput = document.getElementById('lastPaycheckDate');
             const lastPaycheckRow       = document.getElementById('lastPaycheckRow');
+            const availableCard         = document.getElementById('availableCard');
             const availableHours        = document.getElementById('availableHours');
             const availableDetail       = document.getElementById('availableDetail');
             const availableExceedsNotice = document.getElementById('availableExceedsNotice');
@@ -572,6 +575,8 @@
             }
 
             function updateAvailable(available) {
+                availableCard.classList.toggle('hidden', !available);
+                if (!available) return;
                 availableHours.textContent = formatHoursMinutes(available.hours);
                 availableHours.classList.toggle('text-green-400', available.hours > 0);
                 availableHours.classList.toggle('text-red-400', available.hours <= 0);
