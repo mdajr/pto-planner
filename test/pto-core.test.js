@@ -265,6 +265,7 @@ test('available to spend is the lowest combined future balance, low point dated'
   closeTo(ledger.available.hours, 21.34);
   assert.equal(ledger.available.lowPointDate.getTime(), fromYMD(2025, 4, 11).getTime());
   assert.equal(ledger.available.exceedsCurrent, false);
+  assert.equal(ledger.available.availableFromDate, null);
 });
 
 test('available to spend can exceed current balance via upcoming accruals', () => {
@@ -274,6 +275,7 @@ test('available to spend can exceed current balance via upcoming accruals', () =
   closeTo(ledger.available.hours, 51.34);
   closeTo(ledger.available.currentTotal, 30);
   assert.equal(ledger.available.exceedsCurrent, true);
+  assert.equal(ledger.available.availableFromDate.getTime(), fromYMD(2025, 4, 1).getTime());
 });
 
 test('available to spend is zero when plans already cause a shortage', () => {

@@ -201,7 +201,7 @@
             importAndRecalc,
             serializeDateYMD,
             parseYMD
-        } from './src/pto-core.js?v=2';
+        } from './src/pto-core.js?v=3';
 
         document.addEventListener('DOMContentLoaded', () => {
             // Balance inputs
@@ -586,7 +586,10 @@
                 availableExceedsNotice.classList.toggle('hidden', !available.exceedsCurrent);
                 if (available.exceedsCurrent) {
                     const extra = available.hours - available.currentTotal;
-                    availableExceedsText.textContent = `Your current balance is ${formatHoursMinutes(available.currentTotal)}. The extra ${formatHoursMinutes(extra)} comes from future accruals, so schedule that time after it has accrued.`;
+                    const fromDate = available.availableFromDate;
+                    availableExceedsText.textContent = fromDate
+                        ? `The extra ${formatHoursMinutes(extra)} comes from future accruals. Before ${formatDate(fromDate)} you can use up to your current ${formatHoursMinutes(available.currentTotal)}; the full ${formatHoursMinutes(available.hours)} is available for time off on or after ${formatDate(fromDate)}.`
+                        : `Your current balance is ${formatHoursMinutes(available.currentTotal)}. The extra ${formatHoursMinutes(extra)} comes from future accruals.`;
                 }
             }
 

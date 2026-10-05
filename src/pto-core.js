@@ -521,11 +521,22 @@ export function computeAvailableToSpend(ledgerEvents) {
     if (lowest === null || total < lowest.total - 1e-9) lowest = { total, date: e.date };
   }
   const hours = lowest ? Math.max(0, lowest.total) : 0;
+  const exceedsCurrent = hours > currentTotal + 1e-9;
+
+  // Spending X on date d lowers every balance from d onward, so it's safe once
+  // the balance as of d reaches X (later points are all >= X by definition).
+  let availableFromDate = null;
+  if (exceedsCurrent) {
+    const firstEnough = points.find(e => e.runningStandard + e.runningFlex >= hours - 1e-9);
+    availableFromDate = firstEnough ? firstEnough.date : null;
+  }
+
   return {
     hours,
     lowPointDate: lowest ? lowest.date : null,
     currentTotal,
-    exceedsCurrent: hours > currentTotal + 1e-9
+    exceedsCurrent,
+    availableFromDate
   };
 }
 
