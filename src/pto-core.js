@@ -503,7 +503,107 @@ export function generateTimelineLedger(today, initialStandard, initialFlex, vaca
 
   const hasAnyShortage = displayEvents.some(e => e.type === 'vacation' && e.causesShortage);
   const available = computeAvailableToSpend(events);
-  return { events: displayEvents, hasAnyShortage, available };
+  const spendable = computeSpendableSchedule(events);
+  return { events: displayEvents, points: events, hasAnyShortage, available, spendable };
+}
+
+// The step function behind "how much could I book on date d?". Booking hours on
+// d lowers every balance from d onward, so the answer is the lowest combined
+// balance from d to the end of the projection. Caps and rollover only make the
+// real outcome better than that (less is forfeited), so this never overstates.
+// Returns steps in date order; each holds from its date until the next step.
+export function computeSpendableSchedule(ledgerEvents) {
+  const n = ledgerEvents.length;
+  const suffix = new Array(n);
+  let low = null;
+  for (let i = n - 1; i >= 0; i--) {
+    const p = ledgerEvents[i];
+    const total = p.runningStandard + p.runningFlex;
+    // <= keeps the earliest of tied low points, the one that binds first.
+    if (low === null || total <= low.total + 1e-9) low = { total, point: p };
+    suffix[i] = low;
+  }
+
+  const steps = [];
+  for (let i = 0; i < n; i++) {
+    const p = ledgerEvents[i];
+    // Same-day events: booking on that day lands after all of them.
+    if (i < n - 1 && ledgerEvents[i + 1].date.getTime() === p.date.getTime()) continue;
+    const hours = Math.max(0, suffix[i].total);
+    const prev = steps[steps.length - 1];
+    if (prev && Math.abs(prev.hours - hours) < 1e-9) continue;
+    const lp = suffix[i].point;
+    steps.push({
+      date: p.date,
+      hours,
+      lowPointDate: lp.date,
+      lowPointVacationId: lp.type === 'vacation-day' ? lp.parentId : null
+    });
+  }
+  return steps;
+}
+
+export function spendableOn(schedule, date) {
+  if (!schedule.length) return null;
+  const t = toLocalMidnight(date).getTime();
+  let found = schedule[0];
+  for (const s of schedule) {
+    if (s.date.getTime() <= t) found = s;
+    else break;
+  }
+  return found;
+}
+
+// Collapses consecutive accruals (within one calendar year, between vacations)
+// into a single 'accrual-run' entry so the timeline shows what matters:
+// current balance, vacations, rollovers. Individual accruals stay in `entries`.
+export function groupAccrualRuns(displayEvents, config = DEFAULT_CONFIG) {
+  const out = [];
+  let run = null;
+  const stdCap = config.standard.cap;
+  const flexCap = config.flex.balanceCap;
+
+  for (const e of displayEvents) {
+    if (e.type !== 'accrual') {
+      run = null;
+      out.push(e);
+      continue;
+    }
+
+    const capHits = [];
+    const stdBefore = e.runningStandard - e.standardChange;
+    const flexBefore = e.runningFlex - e.flexChange;
+    if (e.standardChange > 0 && e.runningStandard >= stdCap - 1e-6 && stdBefore < stdCap - 1e-6) capHits.push('standard');
+    if (e.flexChange > 0 && e.runningFlex >= flexCap - 1e-6 && flexBefore < flexCap - 1e-6) capHits.push('flex');
+
+    if (!run || run.endDate.getFullYear() !== e.date.getFullYear()) {
+      run = {
+        type: 'accrual-run',
+        date: e.date,
+        startDate: e.date,
+        endDate: e.date,
+        count: 0,
+        standardChange: 0,
+        flexChange: 0,
+        runningStandard: e.runningStandard,
+        runningFlex: e.runningFlex,
+        yearEndInfo: e.yearEndInfo || null,
+        capHits: [],
+        entries: []
+      };
+      out.push(run);
+    }
+
+    run.count++;
+    run.endDate = e.date;
+    run.standardChange += e.standardChange;
+    run.flexChange += e.flexChange;
+    run.runningStandard = e.runningStandard;
+    run.runningFlex = e.runningFlex;
+    for (const kind of capHits) run.capHits.push({ date: e.date, kind });
+    run.entries.push({ ...e, capHits });
+  }
+  return out;
 }
 
 // How much combined (standard + flex) PTO can still be spent without any future

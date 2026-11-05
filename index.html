@@ -40,6 +40,13 @@
         .hm-input { display: flex; align-items: center; gap: 0.35rem; }
         .hm-input input { width: 4.5rem; }
         .hm-input span { color: #9ca3af; font-size: 0.875rem; white-space: nowrap; }
+        :root { --series-balance: #3987e5; --series-safe: #d95926; --critical: #d03b3b; }
+        #balanceChart { touch-action: pan-y; cursor: crosshair; }
+        .tabular { font-variant-numeric: tabular-nums; }
+        details.accrual-details > summary { cursor: pointer; list-style: none; }
+        details.accrual-details > summary::-webkit-details-marker { display: none; }
+        details.accrual-details > summary::before { content: '▸ '; }
+        details.accrual-details[open] > summary::before { content: '▾ '; }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -62,6 +69,17 @@
             <div id="availableExceedsNotice" class="hidden mt-4 bg-yellow-900 border-l-4 border-yellow-500 text-yellow-100 p-4 rounded-lg" role="status" aria-live="polite">
                 <p class="font-bold">More than your current balance</p>
                 <p id="availableExceedsText"></p>
+            </div>
+            <div class="mt-5 pt-4 border-t border-gray-700">
+                <label for="planDate" class="block text-sm font-medium text-gray-300">Thinking about a specific day? <span class="text-gray-400 font-normal">(or click the chart below)</span></label>
+                <div class="flex flex-wrap items-center gap-3 mt-1">
+                    <input type="date" id="planDate" class="bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <button id="planDateClear" class="hidden text-sm text-gray-400 hover:text-white underline">Clear</button>
+                </div>
+                <div id="planDateResult" class="hidden mt-3" aria-live="polite">
+                    <p class="text-lg"><span class="text-gray-300">You could book up to</span> <span id="planDateHours" class="font-bold text-white"></span> <span id="planDateWhen" class="text-gray-300"></span></p>
+                    <p id="planDateDetail" class="text-sm text-gray-400 mt-1"></p>
+                </div>
             </div>
         </div>
 
@@ -179,7 +197,17 @@
 
         <!-- Timeline Section -->
         <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
-            <h2 class="text-2xl font-semibold mb-6 text-white">Projected PTO Timeline</h2>
+            <h2 class="text-2xl font-semibold mb-1 text-white">Projected PTO Timeline</h2>
+            <p class="text-sm text-gray-400 mb-4">Combined Standard + Flex hours. The gap between the line and the shaded area is held back for vacations you've already planned.</p>
+            <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-300 mb-2" aria-hidden="true">
+                <span class="flex items-center gap-2"><svg width="18" height="4"><line x1="1" y1="2" x2="17" y2="2" stroke="var(--series-balance)" stroke-width="2" stroke-linecap="round"/></svg>Projected balance</span>
+                <span class="flex items-center gap-2"><svg width="12" height="12"><rect width="12" height="12" rx="2" fill="var(--series-safe)" fill-opacity="0.28"/></svg>Safe to spend if taken that day</span>
+                <span class="flex items-center gap-2"><svg width="12" height="12"><rect width="12" height="12" rx="2" fill="#9ca3af" fill-opacity="0.18"/></svg>Planned vacation</span>
+            </div>
+            <div id="chartWrap" class="relative mb-8 select-none">
+                <svg id="balanceChart" class="block w-full" role="img" aria-label="Projected PTO balance chart"></svg>
+                <div id="chartTooltip" class="hidden absolute pointer-events-none bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm shadow-lg" style="min-width: 12rem;"></div>
+            </div>
             <div id="timeline" class="relative"></div>
         </div>
     </div>
@@ -200,8 +228,10 @@
             exportState,
             importAndRecalc,
             serializeDateYMD,
-            parseYMD
-        } from './src/pto-core.js?v=3';
+            parseYMD,
+            spendableOn,
+            groupAccrualRuns
+        } from './src/pto-core.js?v=4';
 
         document.addEventListener('DOMContentLoaded', () => {
             // Balance inputs
@@ -238,6 +268,15 @@
             const availableDetail       = document.getElementById('availableDetail');
             const availableExceedsNotice = document.getElementById('availableExceedsNotice');
             const availableExceedsText  = document.getElementById('availableExceedsText');
+            const planDateInput         = document.getElementById('planDate');
+            const planDateClear         = document.getElementById('planDateClear');
+            const planDateResult        = document.getElementById('planDateResult');
+            const planDateHours         = document.getElementById('planDateHours');
+            const planDateWhen          = document.getElementById('planDateWhen');
+            const planDateDetail        = document.getElementById('planDateDetail');
+            const balanceChart          = document.getElementById('balanceChart');
+            const chartWrap             = document.getElementById('chartWrap');
+            const chartTooltip          = document.getElementById('chartTooltip');
 
             let vacations = [];
 
@@ -593,6 +632,401 @@
                 }
             }
 
+            let lastLedger = null;
+            const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const DAY_MS = 86400000;
+
+            function vacationRangeText(v) {
+                return formatDate(v.startDate) === formatDate(v.endDate)
+                    ? formatDate(v.startDate)
+                    : `${formatDate(v.startDate)} -> ${formatDate(v.endDate)}`;
+            }
+
+            function vacationLabel(v) {
+                return v.name ? `${v.name} (${vacationRangeText(v)})` : `vacation ${vacationRangeText(v)}`;
+            }
+
+            function totalOf(p) {
+                return p.runningStandard + p.runningFlex;
+            }
+
+            // Ledger point in effect at the end of `date` (the last event on or before it).
+            function pointAsOf(points, date) {
+                const t = date.getTime();
+                let found = points[0];
+                for (const p of points) {
+                    if (p.date.getTime() <= t) found = p;
+                    else break;
+                }
+                return found;
+            }
+
+            function vacationOn(date) {
+                const t = date.getTime();
+                return vacations.find(v => v.startDate.getTime() <= t && t <= v.endDate.getTime()) || null;
+            }
+
+            function projectionEnd(ledger) {
+                const t0 = ledger.points[0].date;
+                return new Date(t0.getFullYear() + 2, 11, 31);
+            }
+
+            function getPlanDate() {
+                const val = planDateInput.value;
+                if (!val) return null;
+                const [y, m, d] = val.split('-').map(Number);
+                const date = new Date(y, m - 1, d);
+                return isNaN(date) ? null : date;
+            }
+
+            function setPlanDate(date) {
+                planDateInput.value = date ? serializeDateYMD(date) : '';
+                updatePlanDate();
+            }
+
+            function updatePlanDate() {
+                const picked = getPlanDate();
+                planDateClear.classList.toggle('hidden', !picked);
+                if (lastLedger) renderChart(lastLedger);
+                if (!picked || !lastLedger || !lastLedger.spendable.length) {
+                    planDateResult.classList.add('hidden');
+                    return;
+                }
+
+                const today = lastLedger.points[0].date;
+                const end = projectionEnd(lastLedger);
+                const date = picked < today ? today : picked;
+                const step = spendableOn(lastLedger.spendable, date);
+                const balance = totalOf(pointAsOf(lastLedger.points, date));
+
+                planDateHours.textContent = formatHoursMinutes(step.hours);
+                planDateHours.classList.toggle('text-red-400', step.hours <= 0);
+                planDateHours.classList.toggle('text-white', step.hours > 0);
+                planDateWhen.textContent = `on ${formatDate(date)}`;
+
+                const notes = [];
+                if (picked < today) notes.push('That date has passed, so this is for today.');
+                if (date > end) notes.push(`That's past the end of the projection (${formatDate(end)}), so later vacations aren't counted.`);
+
+                const reserved = balance - step.hours;
+                if (reserved > 0.01) {
+                    const v = step.lowPointVacationId != null ? vacations.find(x => x.id === step.lowPointVacationId) : null;
+                    const why = v
+                        ? `the rest is needed for ${vacationLabel(v)}`
+                        : `your balance drops to ${formatHoursMinutes(Math.max(0, totalOf(pointAsOf(lastLedger.points, step.lowPointDate))))} on ${formatDate(step.lowPointDate)}`;
+                    notes.push(`Your balance that day is projected at ${formatHoursMinutes(balance)}, but ${formatHoursMinutes(reserved)} is held back because ${why}.`);
+                } else {
+                    notes.push(`That's your whole projected balance that day. None of it is needed for later vacations.`);
+                }
+                planDateDetail.textContent = notes.join(' ');
+                planDateResult.classList.remove('hidden');
+            }
+
+            // --- Chart ---
+            let chartGeom = null;
+            let hoverDate = null;
+
+            function niceStep(range, maxTicks) {
+                for (const s of [5, 10, 20, 25, 40, 50, 100, 200, 500]) {
+                    if (range / s <= maxTicks) return s;
+                }
+                return 1000;
+            }
+
+            function renderChart(ledger) {
+                const points = ledger.points;
+                if (!points.length) { balanceChart.innerHTML = ''; return; }
+
+                const width = Math.max(280, chartWrap.clientWidth || 600);
+                const height = width < 560 ? 220 : 280;
+                const m = { top: 14, right: 14, bottom: 28, left: 44 };
+                const t0 = points[0].date.getTime();
+                // Show a year, or through the last plan (or picked date) plus a
+                // couple of months; past that the line just climbs to the caps.
+                const t0d = points[0].date;
+                const pickedForRange = getPlanDate();
+                let viewEnd = new Date(t0d.getFullYear() + 1, t0d.getMonth(), t0d.getDate()).getTime();
+                for (const v of vacations) viewEnd = Math.max(viewEnd, new Date(v.endDate.getFullYear(), v.endDate.getMonth() + 3, 1).getTime());
+                if (pickedForRange) viewEnd = Math.max(viewEnd, new Date(pickedForRange.getFullYear(), pickedForRange.getMonth() + 2, 1).getTime());
+                const tEnd = Math.max(t0 + 30 * DAY_MS, Math.min(viewEnd, projectionEnd(ledger).getTime()));
+                const iw = width - m.left - m.right;
+                const ih = height - m.top - m.bottom;
+
+                // One balance per day: the last event that day wins.
+                const daily = [];
+                for (const p of points) {
+                    if (p.date.getTime() > tEnd) break;
+                    const last = daily[daily.length - 1];
+                    if (last && last.date.getTime() === p.date.getTime()) last.total = totalOf(p);
+                    else daily.push({ date: p.date, total: totalOf(p) });
+                }
+
+                const minTotal = Math.min(0, ...daily.map(d => d.total));
+                const maxTotal = Math.max(8, ...daily.map(d => d.total));
+                const step = niceStep(maxTotal - minTotal, 5);
+                const yMin = Math.floor(minTotal / step) * step;
+                const yMax = Math.ceil((maxTotal * 1.04) / step) * step;
+
+                const x = t => m.left + ((t - t0) / (tEnd - t0)) * iw;
+                const y = v => m.top + (1 - (v - yMin) / (yMax - yMin)) * ih;
+                const xEnd = x(tEnd);
+
+                const parts = [];
+
+                // Gridlines + y labels
+                for (let v = yMin; v <= yMax + 1e-9; v += step) {
+                    const yy = y(v).toFixed(1);
+                    parts.push(`<line x1="${m.left}" x2="${xEnd}" y1="${yy}" y2="${yy}" stroke="${v === 0 ? '#4b5563' : '#374151'}" stroke-width="1"/>`);
+                    parts.push(`<text x="${m.left - 8}" y="${yy}" dy="0.32em" text-anchor="end" fill="#9ca3af" font-size="11" class="tabular">${v}h</text>`);
+                }
+
+                // Month ticks along x, thinned to fit
+                const months = [];
+                for (let d = new Date(points[0].date.getFullYear(), points[0].date.getMonth() + 1, 1); d.getTime() <= tEnd; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+                    months.push(new Date(d));
+                }
+                const every = [1, 2, 3, 6, 12].find(k => months.length / k <= iw / 56) || 12;
+                months.forEach(d => {
+                    if (d.getMonth() % every !== 0) return;
+                    const xx = x(d.getTime()).toFixed(1);
+                    const label = d.getMonth() === 0 ? `${MONTHS[0]} '${String(d.getFullYear()).slice(2)}` : MONTHS[d.getMonth()];
+                    parts.push(`<line x1="${xx}" x2="${xx}" y1="${m.top + ih}" y2="${m.top + ih + 4}" stroke="#4b5563"/>`);
+                    parts.push(`<text x="${xx}" y="${m.top + ih + 17}" text-anchor="middle" fill="${d.getMonth() === 0 ? '#d1d5db' : '#9ca3af'}" font-size="11">${label}</text>`);
+                });
+
+                // Vacation bands
+                for (const v of vacations) {
+                    const s = Math.max(v.startDate.getTime(), t0);
+                    const e = Math.min(v.endDate.getTime() + DAY_MS, tEnd);
+                    if (e <= s) continue;
+                    const xs = x(s), w = Math.max(3, x(e) - xs);
+                    parts.push(`<rect x="${xs.toFixed(1)}" y="${m.top}" width="${w.toFixed(1)}" height="${ih}" fill="#9ca3af" fill-opacity="0.18"/>`);
+                }
+
+                // Safe-to-spend area (step function)
+                const sched = ledger.spendable.filter(s => s.date.getTime() <= tEnd);
+                if (sched.length) {
+                    let d = '';
+                    sched.forEach((s, i) => {
+                        const xs = x(Math.max(s.date.getTime(), t0));
+                        const xe = i < sched.length - 1 ? x(sched[i + 1].date.getTime()) : xEnd;
+                        const yy = y(s.hours);
+                        d += `${i === 0 ? 'M' : 'L'}${xs.toFixed(1)},${yy.toFixed(1)} L${xe.toFixed(1)},${yy.toFixed(1)} `;
+                    });
+                    const edge = d;
+                    d += `L${xEnd.toFixed(1)},${y(0).toFixed(1)} L${x(t0).toFixed(1)},${y(0).toFixed(1)} Z`;
+                    parts.push(`<path d="${d}" fill="var(--series-safe)" fill-opacity="0.28"/>`);
+                    parts.push(`<path d="${edge}" fill="none" stroke="var(--series-safe)" stroke-width="2" stroke-linejoin="round"/>`);
+                }
+
+                // Balance line (step function)
+                let bd = '';
+                daily.forEach((p, i) => {
+                    const xs = x(p.date.getTime());
+                    const xe = i < daily.length - 1 ? x(daily[i + 1].date.getTime()) : xEnd;
+                    const yy = y(p.total);
+                    bd += `${i === 0 ? 'M' : 'L'}${xs.toFixed(1)},${yy.toFixed(1)} L${xe.toFixed(1)},${yy.toFixed(1)} `;
+                });
+                parts.push(`<path d="${bd}" fill="none" stroke="var(--series-balance)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`);
+
+                // Negative region marker
+                if (minTotal < 0) {
+                    parts.push(`<line x1="${m.left}" x2="${xEnd}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="var(--critical)" stroke-width="1"/>`);
+                }
+
+                // Picked date marker
+                const picked = getPlanDate();
+                if (picked && picked.getTime() >= t0 && picked.getTime() <= tEnd) {
+                    const xp = x(picked.getTime()).toFixed(1);
+                    const step = spendableOn(sched, picked);
+                    parts.push(`<line x1="${xp}" x2="${xp}" y1="${m.top}" y2="${m.top + ih}" stroke="#f3f4f6" stroke-width="1"/>`);
+                    if (step) parts.push(`<circle cx="${xp}" cy="${y(step.hours).toFixed(1)}" r="5" fill="var(--series-safe)" stroke="#1f2937" stroke-width="2"/>`);
+                }
+
+                // Hover layer
+                parts.push(`<g id="chartHover" style="display:none"><line id="chartCross" y1="${m.top}" y2="${m.top + ih}" stroke="#d1d5db" stroke-width="1" stroke-opacity="0.6"/><circle id="chartDot" r="4.5" fill="var(--series-balance)" stroke="#1f2937" stroke-width="2"/></g>`);
+
+                balanceChart.setAttribute('viewBox', `0 0 ${width} ${height}`);
+                balanceChart.setAttribute('height', height);
+                balanceChart.innerHTML = parts.join('');
+                chartGeom = { x, y, t0, tEnd, m, iw, ih, width, height, daily };
+                if (hoverDate) showHover(hoverDate);
+            }
+
+            function dateFromClientX(clientX) {
+                if (!chartGeom) return null;
+                const rect = balanceChart.getBoundingClientRect();
+                const px = (clientX - rect.left) * (chartGeom.width / rect.width);
+                const frac = Math.min(1, Math.max(0, (px - chartGeom.m.left) / chartGeom.iw));
+                return toLocalMidnight(new Date(chartGeom.t0 + frac * (chartGeom.tEnd - chartGeom.t0)));
+            }
+
+            function showHover(date) {
+                if (!chartGeom || !lastLedger) return;
+                hoverDate = date;
+                const g = chartGeom;
+                const p = pointAsOf(lastLedger.points, date);
+                const step = spendableOn(lastLedger.spendable, date);
+                const total = totalOf(p);
+                const xx = g.x(date.getTime());
+
+                const hover = document.getElementById('chartHover');
+                const cross = document.getElementById('chartCross');
+                const dot = document.getElementById('chartDot');
+                hover.style.display = '';
+                cross.setAttribute('x1', xx); cross.setAttribute('x2', xx);
+                dot.setAttribute('cx', xx); dot.setAttribute('cy', g.y(total));
+
+                chartTooltip.textContent = '';
+                const add = (cls, text) => {
+                    const el = document.createElement('div');
+                    el.className = cls;
+                    el.textContent = text;
+                    chartTooltip.appendChild(el);
+                    return el;
+                };
+                const addRow = (color, value, label, isArea) => {
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center gap-2 mt-1';
+                    const key = document.createElement('span');
+                    key.style.cssText = isArea
+                        ? `display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};opacity:0.6`
+                        : `display:inline-block;width:12px;height:2px;border-radius:1px;background:${color}`;
+                    const val = document.createElement('span');
+                    val.className = 'font-semibold text-white tabular';
+                    val.textContent = value;
+                    const lab = document.createElement('span');
+                    lab.className = 'text-gray-400';
+                    lab.textContent = label;
+                    row.append(key, val, lab);
+                    chartTooltip.appendChild(row);
+                };
+                add('text-gray-400', formatDate(date));
+                const v = vacationOn(date);
+                if (v) add('text-gray-200', v.name ? `On vacation: ${v.name}` : 'On vacation');
+                addRow('var(--series-balance)', formatHoursMinutes(total), 'balance', false);
+                add('text-xs text-gray-400 ml-5', `Std ${formatHoursMinutes(p.runningStandard)} · Flex ${formatHoursMinutes(p.runningFlex)}`);
+                if (step) addRow('var(--series-safe)', formatHoursMinutes(step.hours), 'safe to spend', true);
+                if (step && total - step.hours > 0.01) add('text-xs text-gray-400 ml-5', `${formatHoursMinutes(total - step.hours)} held for later plans`);
+                add('text-xs text-gray-500 mt-1', 'Click to check this date');
+                chartTooltip.classList.remove('hidden');
+
+                const rect = balanceChart.getBoundingClientRect();
+                const scale = rect.width / g.width;
+                const tipW = chartTooltip.offsetWidth;
+                let left = xx * scale + 12;
+                if (left + tipW > rect.width) left = xx * scale - tipW - 12;
+                chartTooltip.style.left = `${Math.max(0, left)}px`;
+                chartTooltip.style.top = `${g.m.top * scale}px`;
+            }
+
+            function hideHover() {
+                hoverDate = null;
+                const hover = document.getElementById('chartHover');
+                if (hover) hover.style.display = 'none';
+                chartTooltip.classList.add('hidden');
+            }
+
+            balanceChart.addEventListener('pointermove', (e) => {
+                const d = dateFromClientX(e.clientX);
+                if (d) showHover(d);
+            });
+            balanceChart.addEventListener('pointerleave', hideHover);
+            balanceChart.addEventListener('click', (e) => {
+                const d = dateFromClientX(e.clientX);
+                if (d) setPlanDate(d);
+            });
+            balanceChart.setAttribute('tabindex', '0');
+            balanceChart.addEventListener('focus', () => {
+                if (chartGeom) showHover(getPlanDate() || new Date(chartGeom.t0));
+            });
+            balanceChart.addEventListener('blur', hideHover);
+            balanceChart.addEventListener('keydown', (e) => {
+                if (!chartGeom) return;
+                const cur = hoverDate || new Date(chartGeom.t0);
+                let next = null;
+                if (e.key === 'ArrowRight') next = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + (e.shiftKey ? 30 : 7));
+                if (e.key === 'ArrowLeft') next = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() - (e.shiftKey ? 30 : 7));
+                if (next) {
+                    e.preventDefault();
+                    const t = Math.min(chartGeom.tEnd, Math.max(chartGeom.t0, next.getTime()));
+                    showHover(toLocalMidnight(new Date(t)));
+                } else if (e.key === 'Enter' && hoverDate) {
+                    e.preventDefault();
+                    setPlanDate(hoverDate);
+                }
+            });
+            if (window.ResizeObserver) {
+                let lastWidth = 0;
+                new ResizeObserver(() => {
+                    const w = chartWrap.clientWidth;
+                    if (w !== lastWidth && lastLedger) { lastWidth = w; renderChart(lastLedger); }
+                }).observe(chartWrap);
+            }
+
+            planDateInput.addEventListener('change', updatePlanDate);
+            planDateClear.addEventListener('click', () => setPlanDate(null));
+
+            // --- Timeline list ---
+            function changeLine(std, flex, color) {
+                const s = (n) => `${n >= 0 ? '+' : ''}${formatHoursMinutes(n)}`;
+                return `<div class="text-sm ${color}"><span>Std: ${s(std || 0)}</span> | <span>Flex: ${s(flex || 0)}</span></div>`;
+            }
+
+            function balanceLine(std, flex, prefix = '') {
+                const stdColor = (std !== null && std < 0) ? 'text-red-500' : 'text-indigo-300';
+                const flexColor = (flex !== null && flex < 0) ? 'text-red-500' : 'text-cyan-300';
+                const stdDisplay = std !== null ? formatHoursMinutes(std) : '—';
+                const flexDisplay = flex !== null ? formatHoursMinutes(flex) : '—';
+                return `<div class="mt-2 text-md">${prefix}<span class="font-bold ${stdColor}">Standard: ${stdDisplay}</span> |
+                        <span class="font-bold ${flexColor}">Flex: ${flexDisplay}</span></div>`;
+            }
+
+            function yearEndBlock(info) {
+                const lostStd = info.lostStandard || 0;
+                const lostFlex = info.lostFlex || 0;
+                const anyLoss = (lostStd > 0.01) || (lostFlex > 0.01);
+                return `<div class="p-3 mb-3 bg-gray-700 rounded-lg shadow-inner">
+                    <h5 class="font-bold text-lg text-white">${info.fromYear} -> ${info.toYear} rollover</h5>
+                    ${lostStd > 0.01 ? `<p class="text-sm font-semibold text-red-500">Standard PTO forfeited: ${formatHoursMinutes(lostStd)}</p>` : ''}
+                    ${lostFlex > 0.01 ? `<p class="text-sm font-semibold text-red-500">Flex PTO forfeited (over 48h): ${formatHoursMinutes(lostFlex)}</p>` : ''}
+                    ${!anyLoss ? `<p class="text-sm text-gray-300">No PTO forfeited at rollover.</p>` : ''}
+                </div>`;
+            }
+
+            function accrualRunHtml(run, config) {
+                const kind = config.payPeriod === 'biweekly' ? 'biweekly' : 'monthly';
+                const title = run.count === 1
+                    ? `${kind === 'biweekly' ? 'Biweekly' : 'Monthly'} accrual`
+                    : `${run.count} ${kind} accruals`;
+                const dates = run.count === 1
+                    ? formatDate(run.startDate)
+                    : `${formatDate(run.startDate)} -> ${formatDate(run.endDate)}`;
+                const caps = run.capHits.map(c => c.kind === 'standard'
+                    ? `<p class="text-red-500 font-bold text-sm">Standard PTO reaches the ${config.standard.cap}h cap on ${formatDate(c.date)}.</p>`
+                    : `<p class="text-red-500 font-bold text-sm">Flex PTO reaches the ${config.flex.balanceCap}h balance cap on ${formatDate(c.date)}.</p>`).join('');
+                const rows = run.entries.map(e => `<tr class="border-t border-gray-700">
+                        <td class="py-1 pr-4">${formatDate(e.date)}</td>
+                        <td class="py-1 pr-4 text-green-400">+${formatHoursMinutes(e.standardChange)}</td>
+                        <td class="py-1 pr-4 text-green-400">+${formatHoursMinutes(e.flexChange)}</td>
+                        <td class="py-1 pr-4 text-indigo-300">${formatHoursMinutes(e.runningStandard)}</td>
+                        <td class="py-1 text-cyan-300">${formatHoursMinutes(e.runningFlex)}</td>
+                    </tr>`).join('');
+                const details = run.count > 1 ? `<details class="accrual-details mt-2 text-sm text-gray-400">
+                        <summary class="hover:text-gray-200">Show each accrual</summary>
+                        <div class="overflow-x-auto mt-2"><table class="tabular text-left whitespace-nowrap">
+                            <thead class="text-gray-500"><tr><th class="pr-4 font-medium">Date</th><th class="pr-4 font-medium">Std</th><th class="pr-4 font-medium">Flex</th><th class="pr-4 font-medium">Std bal</th><th class="font-medium">Flex bal</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table></div>
+                    </details>` : '';
+                return `<p class="text-sm text-gray-400">${dates}</p>
+                    <h4 class="font-semibold text-lg text-white">${title}</h4>
+                    ${changeLine(run.standardChange, run.flexChange, 'text-green-400')}
+                    ${caps}
+                    ${balanceLine(run.runningStandard, run.runningFlex, run.count > 1 ? '<span class="text-sm text-gray-400">After: </span>' : '')}
+                    ${details}`;
+            }
+
             function updateTimeline() {
                 timeline.innerHTML = '';
                 const initialStandardPto = getCurrentStandardDecimal();
@@ -603,80 +1037,45 @@
                 const config = buildConfig();
 
                 const ledger = generateTimelineLedger(today, initialStandardPto, initialFlexPto, vacations, 2, config, hireDate, lastPaycheckDate);
+                lastLedger = ledger;
+                planDateInput.min = serializeDateYMD(today);
+                planDateInput.max = serializeDateYMD(projectionEnd(ledger));
 
                 globalWarningBlock.classList.toggle('hidden', !ledger.hasAnyShortage);
                 updateAvailable(ledger.available);
+                updatePlanDate(); // also renders the chart
 
-                ledger.events.forEach(event => {
+                groupAccrualRuns(ledger.events, config).forEach(event => {
                     const item = document.createElement('div');
                     item.className = 'timeline-item relative pl-10 pb-10';
-
-                    let warning = '';
-                    if (event.type === 'vacation' && event.causesShortage) {
-                        warning = '<div class="p-2 bg-red-900 border border-red-500 text-red-100 rounded-md"><p class="font-bold text-sm">Insufficient PTO for this vacation!</p></div>';
-                    }
-
-                    let changeHtml = '';
-                    if (event.type !== 'initial') {
-                        const standardSign = (event.standardChange || 0) >= 0 ? '+' : '';
-                        const flexSign = (event.flexChange || 0) >= 0 ? '+' : '';
-                        const color = event.type === 'accrual' ? 'text-green-400' : 'text-red-400';
-                        changeHtml = `<div class="text-sm ${color}">
-                                <span>Std: ${standardSign}${formatHoursMinutes(event.standardChange || 0)}</span> | <span>Flex: ${flexSign}${formatHoursMinutes(event.flexChange || 0)}</span>
-                            </div>`;
-                    }
-
-                    let capInfoHtml = '';
-                    let yearEndHtml = '';
-                    if (event.type === 'accrual') {
-                        const stdBefore = (event.runningStandard || 0) - (event.standardChange || 0);
-                        const flexBefore = (event.runningFlex || 0) - (event.flexChange || 0);
-                        if ((event.standardChange || 0) > 0 && event.runningStandard >= DEFAULT_CONFIG.standard.cap - 1e-6 && stdBefore < DEFAULT_CONFIG.standard.cap - 1e-6) {
-                            capInfoHtml += '<p class="text-red-500 font-bold text-sm">Standard PTO reached 160h cap.</p>';
-                        }
-                        if ((event.flexChange || 0) > 0 && event.runningFlex >= DEFAULT_CONFIG.flex.balanceCap - 1e-6 && flexBefore < DEFAULT_CONFIG.flex.balanceCap - 1e-6) {
-                            capInfoHtml += '<p class="text-red-500 font-bold text-sm">Flex PTO reached 96h balance cap.</p>';
-                        }
-                    }
-                    if (event.yearEndInfo) {
-                        const lostStd = event.yearEndInfo.lostStandard || 0;
-                        const lostFlex = event.yearEndInfo.lostFlex || 0;
-                        const anyLoss = (lostStd > 0.01) || (lostFlex > 0.01);
-                        yearEndHtml = `<div class="p-3 mb-3 bg-gray-700 rounded-lg shadow-inner">
-                            <h5 class="font-bold text-lg text-white">${event.yearEndInfo.fromYear} -> ${event.yearEndInfo.toYear} rollover</h5>
-                            ${lostStd > 0.01 ? `<p class="text-sm font-semibold text-red-500">Standard PTO forfeited: ${formatHoursMinutes(lostStd)}</p>` : ''}
-                            ${lostFlex > 0.01 ? `<p class="text-sm font-semibold text-red-500">Flex PTO forfeited (over 48h): ${formatHoursMinutes(lostFlex)}</p>` : ''}
-                            ${!anyLoss ? `<p class="text-sm text-gray-300">No PTO forfeited at rollover.</p>` : ''}
-                        </div>`;
-                    }
-
-                    const description = event.type === 'vacation'
-                        ? (formatDate(event.startDate) === formatDate(event.endDate)
-                            ? `Vacation on ${formatDate(event.startDate)}`
-                            : `Vacation: ${formatDate(event.startDate)} -> ${formatDate(event.endDate)}`) + (event.name ? ` - ${event.name}` : '')
-                        : event.description;
-
+                    const yearEndHtml = event.yearEndInfo ? yearEndBlock(event.yearEndInfo) : '';
                     const dotColor = event.type === 'vacation' ? 'bg-red-500' : (event.type === 'initial' ? 'bg-blue-500' : 'bg-green-500');
-                    const stdColor = (event.runningStandard !== null && event.runningStandard < 0) ? 'text-red-500' : 'text-indigo-300';
-                    const flexColor = (event.runningFlex !== null && event.runningFlex < 0) ? 'text-red-500' : 'text-cyan-300';
 
-                    const stdDisplay = event.runningStandard !== null ? formatHoursMinutes(event.runningStandard) : '—';
-                    const flexDisplay = event.runningFlex !== null ? formatHoursMinutes(event.runningFlex) : '—';
+                    let body;
+                    if (event.type === 'accrual-run') {
+                        body = accrualRunHtml(event, config);
+                    } else if (event.type === 'vacation') {
+                        const warning = event.causesShortage
+                            ? '<div class="mt-1 p-2 bg-red-900 border border-red-500 text-red-100 rounded-md"><p class="font-bold text-sm">Insufficient PTO for this vacation!</p></div>'
+                            : '';
+                        const description = (formatDate(event.startDate) === formatDate(event.endDate)
+                            ? `Vacation on ${formatDate(event.startDate)}`
+                            : `Vacation: ${formatDate(event.startDate)} -> ${formatDate(event.endDate)}`) + (event.name ? ` - ${escapeHtml(event.name)}` : '');
+                        body = `<p class="text-sm text-gray-400">${formatDate(event.date)}</p>
+                            <h4 class="font-semibold text-lg text-white">${description}</h4>
+                            ${changeLine(event.standardChange, event.flexChange, 'text-red-400')}
+                            ${balanceLine(event.runningStandard, event.runningFlex)}
+                            ${warning}`;
+                    } else {
+                        body = `<p class="text-sm text-gray-400">${formatDate(event.date)}</p>
+                            <h4 class="font-semibold text-lg text-white">${event.description}</h4>
+                            ${balanceLine(event.runningStandard, event.runningFlex)}`;
+                    }
 
                     item.innerHTML = `
                         ${yearEndHtml}
                         <div class="timeline-dot ${dotColor}"></div>
-                        <div class="relative top-[-0.2rem]">
-                            <p class="text-sm text-gray-400">${formatDate(event.date)}</p>
-                            <h4 class="font-semibold text-lg text-white">${description}</h4>
-                            ${changeHtml}
-                            ${capInfoHtml}
-                            <div class="mt-2 text-md">
-                                <span class="font-bold ${stdColor}">Standard: ${stdDisplay}</span> |
-                                <span class="font-bold ${flexColor}">Flex: ${flexDisplay}</span>
-                            </div>
-                            <div class="mt-1">${warning}</div>
-                        </div>
+                        <div class="relative top-[-0.2rem]">${body}</div>
                     `;
                     timeline.appendChild(item);
                 });

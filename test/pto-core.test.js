@@ -22,6 +22,8 @@ import {
   generateTimelineLedger,
   exportState,
   importAndRecalc,
+  spendableOn,
+  groupAccrualRuns,
   fromYMD
 } from '../src/pto-core.js';
 
@@ -283,6 +285,63 @@ test('available to spend is zero when plans already cause a shortage', () => {
   const vacations = [{ id: 1, startDate: fromYMD(2025, 2, 3), endDate: fromYMD(2025, 2, 5), standardHours: 40, flexHours: 0 }];
   const ledger = generateTimelineLedger(today, 0, 0, vacations, 0, DEFAULT_CONFIG);
   assert.equal(ledger.available.hours, 0);
+});
+
+test('spendable on a date is the lowest balance from that date on', () => {
+  const today = fromYMD(2025, 3, 15);
+  const vacations = [{ id: 9, startDate: fromYMD(2025, 6, 2), endDate: fromYMD(2025, 6, 6), standardHours: 40, flexHours: 0 }];
+  const ledger = generateTimelineLedger(today, 20, 10, vacations, 0, DEFAULT_CONFIG);
+  // Today: only the current 30h can be booked.
+  closeTo(spendableOn(ledger.spendable, today).hours, 30);
+  // Apr 1 accrual (+13.34 std, +8 flex) is the low point from then on.
+  closeTo(spendableOn(ledger.spendable, fromYMD(2025, 4, 15)).hours, 51.34);
+  // From May 1 the June trip binds: balance after it is 52.02 (flex capped at 48/yr).
+  const may = spendableOn(ledger.spendable, fromYMD(2025, 5, 20));
+  closeTo(may.hours, 52.02);
+  assert.equal(may.lowPointVacationId, 9);
+  assert.equal(may.lowPointDate.getTime(), fromYMD(2025, 6, 6).getTime());
+  // After the trip, the next accrual frees things up again.
+  assert.ok(spendableOn(ledger.spendable, fromYMD(2025, 7, 2)).hours > 60);
+});
+
+test('spendable schedule never decreases and never goes below zero', () => {
+  const today = fromYMD(2025, 1, 15);
+  const vacations = [{ id: 1, startDate: fromYMD(2025, 2, 3), endDate: fromYMD(2025, 2, 5), standardHours: 40, flexHours: 0 }];
+  const ledger = generateTimelineLedger(today, 0, 0, vacations, 1, DEFAULT_CONFIG);
+  let prev = -1;
+  for (const s of ledger.spendable) {
+    assert.ok(s.hours >= 0);
+    assert.ok(s.hours >= prev - 1e-9);
+    prev = s.hours;
+  }
+  assert.equal(spendableOn(ledger.spendable, today).hours, 0);
+});
+
+test('groupAccrualRuns collapses accruals between vacations and splits by year', () => {
+  const today = fromYMD(2025, 3, 15);
+  const vacations = [{ id: 1, startDate: fromYMD(2025, 6, 2), endDate: fromYMD(2025, 6, 2), standardHours: 8, flexHours: 0 }];
+  const ledger = generateTimelineLedger(today, 0, 0, vacations, 1, DEFAULT_CONFIG);
+  const grouped = groupAccrualRuns(ledger.events, DEFAULT_CONFIG);
+  assert.deepEqual(grouped.map(e => e.type), ['initial', 'accrual-run', 'vacation', 'accrual-run', 'accrual-run']);
+  const [, first, , rest2025, y2026] = grouped;
+  assert.equal(first.count, 3); // Apr, May, Jun 1
+  assert.equal(first.endDate.getTime(), fromYMD(2025, 6, 1).getTime());
+  assert.equal(rest2025.count, 6); // Jul..Dec
+  assert.equal(y2026.count, 12);
+  assert.ok(y2026.yearEndInfo, 'rollover info rides on the run that starts Jan 1');
+  // Totals add up and ending balances match the last entry.
+  const sum = first.entries.reduce((a, e) => a + e.standardChange, 0);
+  closeTo(first.standardChange, sum);
+  assert.equal(first.runningStandard, first.entries[2].runningStandard);
+});
+
+test('groupAccrualRuns records when a balance cap is reached', () => {
+  const today = fromYMD(2025, 3, 15);
+  const ledger = generateTimelineLedger(today, 150, 90, [], 0, DEFAULT_CONFIG);
+  const run = groupAccrualRuns(ledger.events, DEFAULT_CONFIG).find(e => e.type === 'accrual-run');
+  const kinds = run.capHits.map(c => c.kind).sort();
+  assert.deepEqual(kinds, ['flex', 'standard']);
+  assert.equal(run.capHits.find(c => c.kind === 'standard').date.getTime(), fromYMD(2025, 4, 1).getTime());
 });
 
 // --- New: formatHoursMinutes and hrsMins helpers ---
